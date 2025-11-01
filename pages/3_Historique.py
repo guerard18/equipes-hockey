@@ -10,45 +10,56 @@ if not os.path.exists(path):
     st.warning("Aucun historique trouvé pour le moment.")
 else:
     df = pd.read_csv(path)
+
     if df.empty:
         st.info("L’historique est vide pour le moment.")
     else:
-        # Réorganiser les colonnes et trier
-        colonnes = ["Date", "Moyenne_Blanc", "Moyenne_Noir", "Equipe_Blanc", "Equipe_Noir"]
+        colonnes = [
+            "Date", "Moyenne_Blanc", "Moyenne_Noir",
+            "Trios_Blanc", "Duos_Blanc", "Trios_Noir", "Duos_Noir",
+            "Equipe_Blanc", "Equipe_Noir"
+        ]
         df = df[[c for c in colonnes if c in df.columns]].sort_values("Date", ascending=False)
 
         # Sélecteur de match
         st.subheader("📅 Choisir une date de match")
         dates = df["Date"].dropna().unique().tolist()
         date_select = st.selectbox("Match du :", dates)
-
-        # Filtrage du match sélectionné
         match = df[df["Date"] == date_select].iloc[0]
 
-        # Affichage des moyennes
-        st.markdown(f"### 🗓️ Match du {match['Date']}")
-        st.write(f"**Moyenne Équipe Blanche :** {match['Moyenne_Blanc']}")
-        st.write(f"**Moyenne Équipe Noire :** {match['Moyenne_Noir']}")
+        # En-tête
+        st.markdown(f"### 🏒 Match du {match['Date']}")
+        st.write(f"**Moyenne BLANCS ⚪ :** {match['Moyenne_Blanc']}")
+        st.write(f"**Moyenne NOIRS ⚫ :** {match['Moyenne_Noir']}")
 
-        # Affichage clair des équipes
         st.divider()
         col1, col2 = st.columns(2)
 
+        # ----- BLANCS -----
         with col1:
-            st.markdown("### ⚪ Équipe Blanche")
-            joueurs_blanc = match["Equipe_Blanc"].split(", ")
-            for j in joueurs_blanc:
+            st.markdown("### ⚪ BLANCS")
+            st.markdown("**Trios :**")
+            st.markdown(match.get("Trios_Blanc", "Aucun trio enregistré"))
+            st.markdown("**Duos :**")
+            st.markdown(match.get("Duos_Blanc", "Aucun duo enregistré"))
+            st.markdown("**Joueurs :**")
+            for j in match["Equipe_Blanc"].split(", "):
                 st.write(f"- {j}")
 
+        # ----- NOIRS -----
         with col2:
-            st.markdown("### ⚫ Équipe Noire")
-            joueurs_noir = match["Equipe_Noir"].split(", ")
-            for j in joueurs_noir:
+            st.markdown("### ⚫ NOIRS")
+            st.markdown("**Trios :**")
+            st.markdown(match.get("Trios_Noir", "Aucun trio enregistré"))
+            st.markdown("**Duos :**")
+            st.markdown(match.get("Duos_Noir", "Aucun duo enregistré"))
+            st.markdown("**Joueurs :**")
+            for j in match["Equipe_Noir"].split(", "):
                 st.write(f"- {j}")
 
         st.divider()
 
-        # Téléchargement CSV du match
+        # Télécharger le match sélectionné
         st.download_button(
             label="⬇️ Télécharger ce match (CSV)",
             data=df[df["Date"] == date_select].to_csv(index=False).encode("utf-8"),
@@ -56,11 +67,15 @@ else:
             mime="text/csv"
         )
 
-        # Affichage de l'historique complet (résumé)
+        # Tableau résumé
         st.subheader("📘 Historique complet (résumé)")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(
+            df[["Date", "Moyenne_Blanc", "Moyenne_Noir"]],
+            use_container_width=True,
+            hide_index=True
+        )
 
-        # Option de suppression
+        # Bouton pour tout effacer
         if st.button("🧹 Effacer tout l’historique"):
             os.remove(path)
             st.success("✅ Historique effacé avec succès.")
