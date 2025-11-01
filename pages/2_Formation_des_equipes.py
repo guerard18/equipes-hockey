@@ -167,3 +167,47 @@ if teams:
             st.success("✅ Courriel envoyé avec succès !")
         except Exception as e:
             st.error(f"⚠️ Erreur : {e}")
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+import io
+
+# --- Télécharger en PDF ---
+if teams:
+    st.divider()
+    st.subheader("📄 Télécharger les équipes en PDF")
+
+    if st.button("💾 Générer le PDF"):
+        buffer = io.BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=letter)
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawString(200, 770, f"Match du {date_match.strftime('%Y-%m-%d')}")
+        pdf.setFont("Helvetica", 12)
+
+        y = 740
+        pdf.drawString(50, y, f"⚪ BLANCS (moyenne {teams['moyB']})")
+        y -= 20
+        for i, trio in enumerate(teams["equipeB_trios"], 1):
+            pdf.drawString(60, y, f"Trio {i}: {', '.join(trio['nom'])}")
+            y -= 15
+        for i, duo in enumerate(teams["equipeB_duos"], 1):
+            pdf.drawString(60, y, f"Duo {i}: {', '.join(duo['nom'])}")
+            y -= 15
+
+        y -= 20
+        pdf.drawString(50, y, f"⚫ NOIRS (moyenne {teams['moyN']})")
+        y -= 20
+        for i, trio in enumerate(teams["equipeN_trios"], 1):
+            pdf.drawString(60, y, f"Trio {i}: {', '.join(trio['nom'])}")
+            y -= 15
+        for i, duo in enumerate(teams["equipeN_duos"], 1):
+            pdf.drawString(60, y, f"Duo {i}: {', '.join(duo['nom'])}")
+            y -= 15
+
+        pdf.save()
+        buffer.seek(0)
+        st.download_button(
+            label="⬇️ Télécharger le PDF",
+            data=buffer,
+            file_name=f"Match_{date_match}.pdf",
+            mime="application/pdf"
+        )
