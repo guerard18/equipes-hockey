@@ -100,14 +100,14 @@ if st.button("🎯 Générer les équipes équilibrées"):
 teams = st.session_state.get("teams")
 
 if teams:
-    st.subheader("⚪ Équipe Blanche")
+    st.subheader("⚪ BLANCS")
     for i, trio in enumerate(teams["equipeB_trios"], 1):
         st.write(f"**Trio {i}**: {', '.join(trio['nom'])}")
     for i, duo in enumerate(teams["equipeB_duos"], 1):
         st.write(f"**Duo {i}**: {', '.join(duo['nom'])}")
     st.write(f"**Moyenne :** {teams['moyB']}")
 
-    st.subheader("⚫ Équipe Noire")
+    st.subheader("⚫ NOIRS")
     for i, trio in enumerate(teams["equipeN_trios"], 1):
         st.write(f"**Trio {i}**: {', '.join(trio['nom'])}")
     for i, duo in enumerate(teams["equipeN_duos"], 1):
@@ -130,9 +130,9 @@ if teams:
         corps_html = f"""
         <html><body>
         <h2>🏒 Match du {date_match.strftime("%Y-%m-%d")}</h2>
-        <h3>⚪ Équipe Blanche (moyenne {teams['moyB']})</h3>
+        <h3>⚪ BLANCS (moyenne {teams['moyB']})</h3>
         {', '.join(equipeB)}<br><br>
-        <h3>⚫ Équipe Noire (moyenne {teams['moyN']})</h3>
+        <h3>⚫ NOIRS (moyenne {teams['moyN']})</h3>
         {', '.join(equipeN)}
         </body></html>
         """
