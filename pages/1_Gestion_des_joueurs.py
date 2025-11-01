@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import random
 from utils import load_players, save_players
 
 # Optionnel : commit GitHub automatique
@@ -85,6 +86,8 @@ if col2.button("🔁 Remettre toutes les présences à zéro"):
     df = load_players()
     df["present"] = False
     save_players(df)
+    st.session_state["reset_done"] = True  # Flag pour forcer le rerun
+
     st.success("✅ Toutes les présences ont été remises à zéro.")
 
     # Synchronisation GitHub (optionnelle)
@@ -94,7 +97,16 @@ if col2.button("🔁 Remettre toutes les présences à zéro"):
         except Exception as e:
             st.warning(f"⚠️ Impossible de synchroniser sur GitHub : {e}")
 
-    # Rafraîchir la page pour refléter les changements
+    # Rafraîchir la page proprement
+    st.experimental_set_query_params(refresh=random.random())
+    try:
+        st.rerun()
+    except AttributeError:
+        st.experimental_rerun()
+
+# 🔄 Rafraîchissement automatique après reset
+if st.session_state.get("reset_done"):
+    st.session_state["reset_done"] = False
     try:
         st.rerun()
     except AttributeError:
