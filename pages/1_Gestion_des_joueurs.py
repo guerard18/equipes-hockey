@@ -96,4 +96,5 @@ if col2.button("🔁 Remettre toutes les présences à zéro"):
 
 # --- Bouton RECHARGER depuis le disque ---
 if col3.button("♻️ Recharger depuis le disque"):
-    st.experimental_rerun()
+  st.rerun()  # rafraîchir l’affichage
+
