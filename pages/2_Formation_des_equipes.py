@@ -138,9 +138,9 @@ if st.button("🎯 Former de nouvelles équipes équilibrées (aléatoires)"):
                 st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
 
     st.divider()
-    afficher_equipe("⚪ Équipe Blanche", equipeB_trios, equipeB_duos, moyB, "gray")
+    afficher_equipe("⚪ Équipe des BLANCS", equipeB_trios, equipeB_duos, moyB, "gray")
     st.divider()
-    afficher_equipe("⚫ Équipe Noire", equipeN_trios, equipeN_duos, moyN, "black")
+    afficher_equipe("⚫ Équipe des NOIRS", equipeN_trios, equipeN_duos, moyN, "black")
 
     diff = abs(moyB - moyN)
     if diff < 0.5:
