@@ -191,9 +191,9 @@ if st.button("🎯 Former de nouvelles équipes équilibrées (aléatoires)"):
         <body style='font-family:Arial, sans-serif;'>
         <h2>🏒 Composition des équipes du {datetime.now().strftime("%Y-%m-%d %H:%M")}</h2>
         <p><b>Moyenne Équipe Blanche :</b> {moyB} — <b>Moyenne Équipe Noire :</b> {moyN}</p>
-        {creer_tableau('⚪ Équipe Blanche', equipeB_trios, equipeB_duos, 'gray')}
+        {creer_tableau('⚪ Équipe des BLANCS', equipeB_trios, equipeB_duos, 'gray')}
         <br>
-        {creer_tableau('⚫ Équipe Noire', equipeN_trios, equipeN_duos, 'black')}
+        {creer_tableau('⚫ Équipe des NOIRS', equipeN_trios, equipeN_duos, 'black')}
         <p style='margin-top:20px;'>Envoyé automatiquement par l'application <b>HockeyApp</b>.</p>
         </body>
         </html>
