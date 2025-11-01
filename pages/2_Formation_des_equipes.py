@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import random
 from datetime import datetime
-
 from utils import load_players, save_history
 
 # Optionnel : commit GitHub automatique
@@ -15,7 +14,8 @@ except Exception:
 st.title("2️⃣ Formation des équipes de hockey 🏒")
 st.markdown(
     "Cette page crée automatiquement deux équipes équilibrées "
-    "en fonction des talents (attaque/défense) des joueurs présents."
+    "en fonction des talents (attaque/défense) des joueurs présents. "
+    "Elle forme aussi **2 trios d’attaque** et **2 duos de défense** par équipe."
 )
 
 # Charger les joueurs présents
@@ -31,14 +31,16 @@ if len(players_present) < 10:
         "mais elles peuvent être incomplètes."
     )
 
-# Bouton pour former les équipes
+# ------------------------------
+# BOUTON : FORMER LES ÉQUIPES
+# ------------------------------
 if st.button("🎯 Former les équipes équilibrées"):
 
     if players_present.empty:
         st.error("❌ Aucun joueur présent. Coche des joueurs avant de continuer.")
         st.stop()
 
-    # Déterminer la position principale selon le meilleur talent
+    # Déterminer la position principale
     players_present["poste"] = players_present.apply(
         lambda x: "Attaquant" if x["talent_attaque"] >= x["talent_defense"] else "Défenseur",
         axis=1
@@ -65,30 +67,78 @@ if st.button("🎯 Former les équipes équilibrées"):
     teamA_df = pd.DataFrame(teamA)
     teamB_df = pd.DataFrame(teamB)
 
-    # Compter les postes
-    nbA_att = (teamA_df["poste"] == "Attaquant").sum()
-    nbA_def = (teamA_df["poste"] == "Défenseur").sum()
-    nbB_att = (teamB_df["poste"] == "Attaquant").sum()
-    nbB_def = (teamB_df["poste"] == "Défenseur").sum()
-
     # Calcul des moyennes
     moy_A = round(teamA_df["talent_total"].mean(), 2)
     moy_B = round(teamB_df["talent_total"].mean(), 2)
 
-    # --- AFFICHAGE ---
+    # ------------------------------
+    # FONCTION POUR FORMER LES LIGNES
+    # ------------------------------
+    def former_lignes(df):
+        attaquants = df[df["poste"] == "Attaquant"].sort_values("talent_attaque", ascending=False).reset_index(drop=True)
+        defenseurs = df[df["poste"] == "Défenseur"].sort_values("talent_defense", ascending=False).reset_index(drop=True)
+
+        trios, duos = [], []
+
+        # Créer 2 trios équilibrés
+        while len(attaquants) > 0:
+            trio = attaquants.head(3)
+            trios.append(trio)
+            attaquants = attaquants.iloc[3:]
+
+        # Créer 2 duos équilibrés
+        while len(defenseurs) > 0:
+            duo = defenseurs.head(2)
+            duos.append(duo)
+            defenseurs = defenseurs.iloc[2:]
+
+        # Si pas assez, compléter avec les joueurs restants
+        if len(trios) < 2:
+            trios.append(pd.DataFrame())
+        if len(duos) < 2:
+            duos.append(pd.DataFrame())
+
+        return trios[:2], duos[:2]
+
+    triosA, duosA = former_lignes(teamA_df)
+    triosB, duosB = former_lignes(teamB_df)
+
+    # ------------------------------
+    # AFFICHAGE
+    # ------------------------------
     st.header("🟦 Équipe A")
-    for _, p in teamA_df.iterrows():
-        st.write(f"{p['nom']} — {p['poste']} ({p['talent_total']:.1f})")
-    st.write(f"**Attaquants :** {nbA_att} | **Défenseurs :** {nbA_def}")
     st.write(f"**Moyenne de talent :** {moy_A}")
+    for i, trio in enumerate(triosA, 1):
+        if not trio.empty:
+            st.markdown(f"**Trio {i} (attaque)**")
+            for _, p in trio.iterrows():
+                st.write(f"- {p['nom']} ({p['talent_attaque']:.1f})")
+    for i, duo in enumerate(duosA, 1):
+        if not duo.empty:
+            st.markdown(f"**Duo {i} (défense)**")
+            for _, p in duo.iterrows():
+                st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
+
+    st.divider()
 
     st.header("🟥 Équipe B")
-    for _, p in teamB_df.iterrows():
-        st.write(f"{p['nom']} — {p['poste']} ({p['talent_total']:.1f})")
-    st.write(f"**Attaquants :** {nbB_att} | **Défenseurs :** {nbB_def}")
     st.write(f"**Moyenne de talent :** {moy_B}")
+    for i, trio in enumerate(triosB, 1):
+        if not trio.empty:
+            st.markdown(f"**Trio {i} (attaque)**")
+            for _, p in trio.iterrows():
+                st.write(f"- {p['nom']} ({p['talent_attaque']:.1f})")
+    for i, duo in enumerate(duosB, 1):
+        if not duo.empty:
+            st.markdown(f"**Duo {i} (défense)**")
+            for _, p in duo.iterrows():
+                st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
 
-    # Différence de talent global
+    st.divider()
+
+    # ------------------------------
+    # Analyse d'équilibre
+    # ------------------------------
     diff = abs(moy_A - moy_B)
     if diff < 0.5:
         st.success("⚖️ Les équipes sont très équilibrées !")
@@ -97,7 +147,9 @@ if st.button("🎯 Former les équipes équilibrées"):
     else:
         st.warning("🔴 Écart de talent notable entre les équipes.")
 
-    # Bouton d'enregistrement
+    # ------------------------------
+    # Sauvegarde dans l’historique
+    # ------------------------------
     if st.button("💾 Enregistrer ces équipes dans l’historique"):
         date = datetime.now().strftime("%Y-%m-%d %H:%M")
         equipeA = teamA_df["nom"].tolist()
