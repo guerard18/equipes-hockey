@@ -13,11 +13,14 @@ except Exception:
 
 st.title("2️⃣ Formation des équipes de hockey 🏒")
 st.markdown(
-    "Cette page forme d’abord **4 trios d’attaque** et **4 duos de défense** équilibrés, "
-    "puis assemble deux équipes les plus équitables possible à partir de ces unités."
+    "Cette page forme d’abord **4 trios d’attaque** et **4 duos de défense** "
+    "ayant des moyennes de talent aussi proches que possible, puis assemble "
+    "deux équipes équilibrées à partir de ces unités."
 )
 
+# ------------------------------
 # Charger les joueurs présents
+# ------------------------------
 players = load_players()
 players_present = players[players["present"] == True].reset_index(drop=True)
 
@@ -47,100 +50,105 @@ if st.button("🎯 Former les équipes équilibrées"):
     attaquants = players_present[players_present["poste"] == "Attaquant"].copy()
     defenseurs = players_present[players_present["poste"] == "Défenseur"].copy()
 
-    # Si pas assez de défenseurs/attaquants, équilibrer avec meilleurs disponibles
+    # S’il manque des joueurs dans un poste, combler avec les meilleurs restants
     if len(defenseurs) < 8:
-        manquant = 8 - len(defenseurs)
-        if len(attaquants) > manquant:
-            defenseurs = pd.concat([defenseurs, attaquants.nlargest(manquant, "talent_defense")])
-            attaquants = attaquants.drop(attaquants.nlargest(manquant, "talent_defense").index)
+        besoin = 8 - len(defenseurs)
+        supl = attaquants.nlargest(besoin, "talent_defense")
+        defenseurs = pd.concat([defenseurs, supl])
+        attaquants = attaquants.drop(supl.index)
 
     if len(attaquants) < 12:
-        manquant = 12 - len(attaquants)
-        if len(defenseurs) > manquant:
-            attaquants = pd.concat([attaquants, defenseurs.nlargest(manquant, "talent_attaque")])
-            defenseurs = defenseurs.drop(defenseurs.nlargest(manquant, "talent_attaque").index)
+        besoin = 12 - len(attaquants)
+        supl = defenseurs.nlargest(besoin, "talent_attaque")
+        attaquants = pd.concat([attaquants, supl])
+        defenseurs = defenseurs.drop(supl.index)
 
     # ------------------------------
-    # FORMATION DES UNITÉS
+    # FONCTION snake draft équilibrée
     # ------------------------------
-    def former_trios(df):
-        df = df.sort_values("talent_attaque", ascending=False).reset_index(drop=True)
-        trios = []
-        while len(df) >= 3:
-            trio = df.head(3)
-            df = df.iloc[3:]
-            trios.append(trio)
-        if len(df) > 0:
-            trios.append(df)  # Trio incomplet
-        return trios
+    def snake_draft(df, taille_groupe, nb_groupes, colonne):
+        df = df.sort_values(colonne, ascending=False).reset_index(drop=True)
+        groupes = [[] for _ in range(nb_groupes)]
+        sens = 1
+        idx = 0
+        for _, joueur in df.iterrows():
+            groupes[idx].append(joueur)
+            idx += sens
+            if idx == nb_groupes:
+                sens = -1
+                idx = nb_groupes - 1
+            elif idx < 0:
+                sens = 1
+                idx = 0
 
-    def former_duos(df):
-        df = df.sort_values("talent_defense", ascending=False).reset_index(drop=True)
-        duos = []
-        while len(df) >= 2:
-            duo = df.head(2)
-            df = df.iloc[2:]
-            duos.append(duo)
-        if len(df) > 0:
-            duos.append(df)  # Duo incomplet
-        return duos
+        groupes_df = []
+        for g in groupes:
+            groupes_df.append(pd.DataFrame(g))
+        return groupes_df
 
-    trios = former_trios(attaquants)
-    duos = former_duos(defenseurs)
+    # Former 4 trios équilibrés
+    trios = snake_draft(attaquants, 3, 4, "talent_attaque")
 
-    # On garde max 4 trios + 4 duos
-    trios = trios[:4]
-    duos = duos[:4]
+    # Former 4 duos équilibrés
+    duos = snake_draft(defenseurs, 2, 4, "talent_defense")
 
     # ------------------------------
-    # DISTRIBUTION DANS LES ÉQUIPES
+    # AFFICHER LES LIGNES ET MOYENNES
     # ------------------------------
-    equipeA_trios, equipeB_trios = [], []
-    equipeA_duos, equipeB_duos = [], []
-    totalA, totalB = 0, 0
+    def afficher_unites(titre, unites, colonne):
+        st.subheader(titre)
+        moyennes = []
+        for i, unite in enumerate(unites, 1):
+            if not unite.empty:
+                moyenne = round(unite[colonne].mean(), 2)
+                moyennes.append(moyenne)
+                st.markdown(f"**{titre[:-1]} {i}** — Moyenne : {moyenne}")
+                for _, p in unite.iterrows():
+                    st.write(f"- {p['nom']} ({p[colonne]:.1f})")
+        st.info(f"Moyenne des {titre.lower()} : {round(sum(moyennes)/len(moyennes),2)} ± {round(pd.Series(moyennes).std(),2)}")
 
-    # Distribuer les trios (équilibre global)
-    for trio in trios:
-        score = trio["talent_attaque"].mean()
-        if totalA <= totalB:
-            equipeA_trios.append(trio)
-            totalA += score
-        else:
-            equipeB_trios.append(trio)
-            totalB += score
-
-    # Distribuer les duos
-    for duo in duos:
-        score = duo["talent_defense"].mean()
-        if totalA <= totalB:
-            equipeA_duos.append(duo)
-            totalA += score
-        else:
-            equipeB_duos.append(duo)
-            totalB += score
-
-    # Moyennes
-    moyA = round(totalA / (len(equipeA_trios) + len(equipeA_duos)), 2) if len(equipeA_trios) + len(equipeA_duos) > 0 else 0
-    moyB = round(totalB / (len(equipeB_trios) + len(equipeB_duos)), 2) if len(equipeB_trios) + len(equipeB_duos) > 0 else 0
+    st.header("🔢 Lignes équilibrées créées")
+    afficher_unites("Trios", trios, "talent_attaque")
+    afficher_unites("Duos", duos, "talent_defense")
 
     # ------------------------------
-    # AFFICHAGE
+    # ASSIGNATION AUX ÉQUIPES
     # ------------------------------
-    def afficher_equipe(nom, trios, duos, moyenne):
-        st.header(nom)
-        st.write(f"**Moyenne de talent global :** {moyenne}")
-        for i, trio in enumerate(trios, 1):
-            st.markdown(f"**Trio {i} (attaque)**")
-            for _, p in trio.iterrows():
-                st.write(f"- {p['nom']} ({p['talent_attaque']:.1f})")
-        for i, duo in enumerate(duos, 1):
-            st.markdown(f"**Duo {i} (défense)**")
-            for _, p in duo.iterrows():
-                st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
+    equipeA_trios = trios[::2]
+    equipeB_trios = trios[1::2]
+    equipeA_duos = duos[::2]
+    equipeB_duos = duos[1::2]
 
-    afficher_equipe("🟦 Équipe A", equipeA_trios, equipeA_duos, moyA)
+    def moyenne_globale(unites, colonne):
+        valeurs = [u[colonne].mean() for u in unites if not u.empty]
+        return round(sum(valeurs) / len(valeurs), 2) if valeurs else 0
+
+    moyA = round((moyenne_globale(equipeA_trios, "talent_attaque") + moyenne_globale(equipeA_duos, "talent_defense")) / 2, 2)
+    moyB = round((moyenne_globale(equipeB_trios, "talent_attaque") + moyenne_globale(equipeB_duos, "talent_defense")) / 2, 2)
+
     st.divider()
-    afficher_equipe("🟥 Équipe B", equipeB_trios, equipeB_duos, moyB)
+    st.header("🟦 Équipe A")
+    st.write(f"**Moyenne globale :** {moyA}")
+    for i, trio in enumerate(equipeA_trios, 1):
+        st.markdown(f"**Trio {i}**")
+        for _, p in trio.iterrows():
+            st.write(f"- {p['nom']} ({p['talent_attaque']:.1f})")
+    for i, duo in enumerate(equipeA_duos, 1):
+        st.markdown(f"**Duo {i}**")
+        for _, p in duo.iterrows():
+            st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
+
+    st.divider()
+    st.header("🟥 Équipe B")
+    st.write(f"**Moyenne globale :** {moyB}")
+    for i, trio in enumerate(equipeB_trios, 1):
+        st.markdown(f"**Trio {i}**")
+        for _, p in trio.iterrows():
+            st.write(f"- {p['nom']} ({p['talent_attaque']:.1f})")
+    for i, duo in enumerate(equipeB_duos, 1):
+        st.markdown(f"**Duo {i}**")
+        for _, p in duo.iterrows():
+            st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
 
     diff = abs(moyA - moyB)
     if diff < 0.5:
@@ -163,7 +171,7 @@ if st.button("🎯 Former les équipes équilibrées"):
 
         if GITHUB_OK:
             try:
-                save_to_github("data/historique.csv", "Nouvelle répartition par unités équilibrées")
+                save_to_github("data/historique.csv", "Nouvelle répartition équilibrée (trios/duos paritaires)")
                 st.toast("💾 Sauvegarde GitHub réussie")
             except Exception as e:
                 st.warning(f"⚠️ Erreur de sauvegarde GitHub : {e}")
