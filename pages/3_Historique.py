@@ -15,9 +15,9 @@ else:
         st.info("L’historique est vide pour le moment.")
     else:
         colonnes = [
-            "Date", "Moyenne_Blanc", "Moyenne_Noir",
-            "Trios_Blanc", "Duos_Blanc", "Trios_Noir", "Duos_Noir",
-            "Equipe_Blanc", "Equipe_Noir"
+            "Date", "Moyenne_BLANCS", "Moyenne_NOIRS",
+            "Trios_BLANCS", "Duos_BLANCS", "Trios_NOIRS", "Duos_NOIRS",
+            "Équipe_BLANCS", "Équipe_NOIRS"
         ]
         df = df[[c for c in colonnes if c in df.columns]].sort_values("Date", ascending=False)
 
@@ -29,8 +29,8 @@ else:
 
         # En-tête
         st.markdown(f"### 🏒 Match du {match['Date']}")
-        st.write(f"**Moyenne BLANCS ⚪ :** {match['Moyenne_Blanc']}")
-        st.write(f"**Moyenne NOIRS ⚫ :** {match['Moyenne_Noir']}")
+        st.write(f"**Moyenne BLANCS ⚪ :** {match['Moyenne_BLANCS']}")
+        st.write(f"**Moyenne NOIRS ⚫ :** {match['Moyenne_NOIRS']}")
 
         st.divider()
         col1, col2 = st.columns(2)
@@ -39,22 +39,22 @@ else:
         with col1:
             st.markdown("### ⚪ BLANCS")
             st.markdown("**Trios :**")
-            st.markdown(match.get("Trios_Blanc", "Aucun trio enregistré"))
+            st.markdown(match.get("Trios_BLANCS", "Aucun trio enregistré"))
             st.markdown("**Duos :**")
-            st.markdown(match.get("Duos_Blanc", "Aucun duo enregistré"))
+            st.markdown(match.get("Duos_BLANCS", "Aucun duo enregistré"))
             st.markdown("**Joueurs :**")
-            for j in match["Equipe_Blanc"].split(", "):
+            for j in match["Équipe_BLANCS"].split(", "):
                 st.write(f"- {j}")
 
         # ----- NOIRS -----
         with col2:
             st.markdown("### ⚫ NOIRS")
             st.markdown("**Trios :**")
-            st.markdown(match.get("Trios_Noir", "Aucun trio enregistré"))
+            st.markdown(match.get("Trios_NOIRS", "Aucun trio enregistré"))
             st.markdown("**Duos :**")
-            st.markdown(match.get("Duos_Noir", "Aucun duo enregistré"))
+            st.markdown(match.get("Duos_NOIRS", "Aucun duo enregistré"))
             st.markdown("**Joueurs :**")
-            for j in match["Equipe_Noir"].split(", "):
+            for j in match["Équipe_NOIRS"].split(", "):
                 st.write(f"- {j}")
 
         st.divider()
@@ -70,7 +70,7 @@ else:
         # Tableau résumé
         st.subheader("📘 Historique complet (résumé)")
         st.dataframe(
-            df[["Date", "Moyenne_Blanc", "Moyenne_Noir"]],
+            df[["Date", "Moyenne_BLANCS", "Moyenne_NOIRS"]],
             use_container_width=True,
             hide_index=True
         )
