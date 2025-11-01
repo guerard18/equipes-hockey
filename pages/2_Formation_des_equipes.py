@@ -162,9 +162,9 @@ if teams:
     afficher_unites("Duos",  teams["equipeB_duos"]  + teams["equipeN_duos"],  "talent_defense")
 
     st.divider()
-    afficher_equipe("⚪ Équipe Blanche", teams["equipeB_trios"], teams["equipeB_duos"], teams["moyB"], "gray")
+    afficher_equipe("⚪ Équipe des BLANCS", teams["equipeB_trios"], teams["equipeB_duos"], teams["moyB"], "gray")
     st.divider()
-    afficher_equipe("⚫ Équipe Noire",   teams["equipeN_trios"], teams["equipeN_duos"], teams["moyN"], "black")
+    afficher_equipe("⚫ Équipe de NOIRS",   teams["equipeN_trios"], teams["equipeN_duos"], teams["moyN"], "black")
 
     diff = abs(teams["moyB"] - teams["moyN"])
     if diff < 0.5:
@@ -215,9 +215,9 @@ if teams:
         <html><body style='font-family:Arial,sans-serif;'>
         <h2>🏒 Composition des équipes ({datetime.now().strftime("%Y-%m-%d %H:%M")})</h2>
         <p><b>Moyenne Blanc:</b> {teams['moyB']} | <b>Moyenne Noir:</b> {teams['moyN']}</p>
-        {creer_tableau('⚪ Équipe Blanche', teams['equipeB_trios'], teams['equipeB_duos'], 'gray')}
+        {creer_tableau('⚪ Équipe des BLANCS', teams['equipeB_trios'], teams['equipeB_duos'], 'gray')}
         <br>
-        {creer_tableau('⚫ Équipe Noire', teams['equipeN_trios'], teams['equipeN_duos'], 'black')}
+        {creer_tableau('⚫ Équipe des NOIRS', teams['equipeN_trios'], teams['equipeN_duos'], 'black')}
         <p style='margin-top:20px;'>— Envoyé automatiquement par <b>HockeyApp</b>.</p>
         </body></html>
         """
