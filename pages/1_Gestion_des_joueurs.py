@@ -95,4 +95,57 @@ if col1.button("💾 Enregistrer les modifications"):
     edited = edited.copy()
     edited["nom"] = edited["nom"].astype(str).str.strip()
     edited = edited.dropna(subset=["nom"])
-    edited["talent_attaque"] = pd.to_numeric(edite]()
+    edited["talent_attaque"] = pd.to_numeric(edited["talent_attaque"], errors="coerce").fillna(5).astype(int).clip(1, 10)
+    edited["talent_defense"] = pd.to_numeric(edited["talent_defense"], errors="coerce").fillna(5).astype(int).clip(1, 10)
+    edited["present"] = edited["present"].fillna(False).astype(bool)
+
+    save_players(edited)
+    st.success("✅ Liste enregistrée avec succès.")
+
+    if GITHUB_OK:
+        try:
+            save_to_github("data/joueurs.csv", "Mise à jour de la liste des joueurs")
+        except Exception as e:
+            st.warning(f"⚠️ Impossible de synchroniser sur GitHub : {e}")
+
+# ===============================
+# BOUTON REMETTRE À ZÉRO
+# ===============================
+if col2.button("🔁 Remettre toutes les présences à zéro"):
+    df = load_players()
+    df["present"] = False
+    save_players(df)
+    st.session_state["reset_done"] = True  # Flag pour forcer le rerun
+
+    st.success("✅ Toutes les présences ont été remises à zéro.")
+
+    # Synchronisation GitHub (optionnelle)
+    if GITHUB_OK:
+        try:
+            save_to_github("data/joueurs.csv", "Remise à zéro des présences")
+        except Exception as e:
+            st.warning(f"⚠️ Impossible de synchroniser sur GitHub : {e}")
+
+    # Rafraîchir la page proprement
+    st.experimental_set_query_params(refresh=random.random())
+    try:
+        st.rerun()
+    except AttributeError:
+        st.experimental_rerun()
+
+# 🔄 Rafraîchissement automatique après reset
+if st.session_state.get("reset_done"):
+    st.session_state["reset_done"] = False
+    try:
+        st.rerun()
+    except AttributeError:
+        st.experimental_rerun()
+
+# ===============================
+# BOUTON RECHARGER
+# ===============================
+if col3.button("♻️ Recharger la liste"):
+    try:
+        st.rerun()
+    except AttributeError:
+        st.experimental_rerun()
