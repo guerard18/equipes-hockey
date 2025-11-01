@@ -121,4 +121,49 @@ if st.button("🎯 Former les équipes équilibrées"):
 
     # Moyennes
     moyA = round(totalA / (len(equipeA_trios) + len(equipeA_duos)), 2) if len(equipeA_trios) + len(equipeA_duos) > 0 else 0
-    moyB = round(totalB / (len(equipeB_trios) + len(equipeB_duos)), 2) if len(equip
+    moyB = round(totalB / (len(equipeB_trios) + len(equipeB_duos)), 2) if len(equipeB_trios) + len(equipeB_duos) > 0 else 0
+
+    # ------------------------------
+    # AFFICHAGE
+    # ------------------------------
+    def afficher_equipe(nom, trios, duos, moyenne):
+        st.header(nom)
+        st.write(f"**Moyenne de talent global :** {moyenne}")
+        for i, trio in enumerate(trios, 1):
+            st.markdown(f"**Trio {i} (attaque)**")
+            for _, p in trio.iterrows():
+                st.write(f"- {p['nom']} ({p['talent_attaque']:.1f})")
+        for i, duo in enumerate(duos, 1):
+            st.markdown(f"**Duo {i} (défense)**")
+            for _, p in duo.iterrows():
+                st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
+
+    afficher_equipe("🟦 Équipe A", equipeA_trios, equipeA_duos, moyA)
+    st.divider()
+    afficher_equipe("🟥 Équipe B", equipeB_trios, equipeB_duos, moyB)
+
+    diff = abs(moyA - moyB)
+    if diff < 0.5:
+        st.success("⚖️ Les équipes sont très équilibrées !")
+    elif diff < 1:
+        st.info("🟡 Les équipes sont assez proches.")
+    else:
+        st.warning("🔴 Les équipes sont un peu déséquilibrées.")
+
+    # ------------------------------
+    # SAUVEGARDE
+    # ------------------------------
+    if st.button("💾 Enregistrer ces équipes dans l’historique"):
+        date = datetime.now().strftime("%Y-%m-%d %H:%M")
+        equipeA = [p for trio in equipeA_trios + equipeA_duos for p in trio["nom"].tolist()]
+        equipeB = [p for trio in equipeB_trios + equipeB_duos for p in trio["nom"].tolist()]
+
+        save_history(equipeA, equipeB, moyA, moyB, date)
+        st.success("✅ Équipes enregistrées dans l’historique !")
+
+        if GITHUB_OK:
+            try:
+                save_to_github("data/historique.csv", "Nouvelle répartition par unités équilibrées")
+                st.toast("💾 Sauvegarde GitHub réussie")
+            except Exception as e:
+                st.warning(f"⚠️ Erreur de sauvegarde GitHub : {e}")
