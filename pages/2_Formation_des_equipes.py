@@ -1,159 +1,94 @@
 import streamlit as st
 import pandas as pd
-import itertools
-from utils import (
-    load_players, load_history, append_history,
-    load_pairings, update_pairings,
-    assign_positions, make_lines_balanced, combo_teams
+import random
+from datetime import datetime
+
+from utils import load_players, save_history
+
+# Optionnel : commit GitHub automatique
+try:
+    from github_utils import save_to_github
+    GITHUB_OK = True
+except Exception:
+    GITHUB_OK = False
+
+
+st.title("2️⃣ Formation des équipes de hockey 🏒")
+st.markdown(
+    "Cette page crée automatiquement deux équipes équilibrées "
+    "en fonction des talents (attaque/défense) des joueurs présents."
 )
 
-st.title("2) Formation des équipes")
-
-st.markdown("""
-Coche d’abord les **Présents** dans *Gestion des joueurs*, puis génère ici **2 équipes**
-avec **2 trios** (attaquants) et **2 duos** (défenseurs) par équipe.
-Tu peux **éditer** avant d’enregistrer dans l’historique.
-""")
-
+# Charger la liste de joueurs présents
 players = load_players()
-present = players[players["present"]].copy()
+players_present = players[players["present"] == True].reset_index(drop=True)
 
-if present.empty:
-    st.warning("Aucun joueur présent. Va dans **Gestion des joueurs** pour cocher des joueurs.")
+st.info(f"✅ {len(players_present)} joueurs présents sélectionnés")
+
+# Vérification minimale
+if len(players_present) < 10:
+    st.error("❌ Pas assez de joueurs présents pour former deux équipes. (minimum 10 requis)")
     st.stop()
 
-# Paramètres
-colA, colB = st.columns(2)
-with colA:
-    want_fw = st.number_input("Attaquants TOTAL (2 équipes)", 6, 24, 12, step=2, help="2 trios par équipe → 6 attaquants par équipe = 12 total")
-with colB:
-    want_df = st.number_input("Défenseurs TOTAL (2 équipes)", 4, 20, 8, step=2, help="2 duos par équipe → 4 défenseurs par équipe = 8 total")
+# Séparer attaque et défense selon les talents les plus élevés
+attaquants = []
+defenseurs = []
 
-# Assigner postes selon meilleur talent, puis ajuster pour coller aux quotas
-fw_pool, df_pool = assign_positions(present, want_fw, want_df)
+for _, row in players_present.iterrows():
+    if row["talent_attaque"] >= row["talent_defense"]:
+        attaquants.append(row)
+    else:
+        defenseurs.append(row)
 
-short_fw = max(0, want_fw - len(fw_pool))
-short_df = max(0, want_df - len(df_pool))
+# Si déséquilibré, réajuster
+if len(attaquants) < 12:
+    st.warning("Peu d’attaquants disponibles — certains joueurs seront réassignés.")
+if len(defenseurs) < 8:
+    st.warning("Peu de défenseurs disponibles — certains joueurs seront réassignés.")
 
-if short_fw > 0 or short_df > 0:
-    st.warning(f"Pas assez de joueurs pour atteindre les quotas. Dispo: {len(fw_pool)} A et {len(df_pool)} D.")
+# Conversion en DataFrame
+attaquants = pd.DataFrame(attaquants)
+defenseurs = pd.DataFrame(defenseurs)
 
-# Limiter aux nombres souhaités si surplus
-fw_pool = fw_pool.head(min(len(fw_pool), want_fw))
-df_pool = df_pool.head(min(len(df_pool), want_df))
+# Mélanger pour varier les combinaisons
+attaquants = attaquants.sample(frac=1, random_state=random.randint(0, 10000)).reset_index(drop=True)
+defenseurs = defenseurs.sample(frac=1, random_state=random.randint(0, 10000)).reset_index(drop=True)
 
-st.write(f"**Sélection finale pour optimisation** → Attaquants: {len(fw_pool)} • Défenseurs: {len(df_pool)}")
+# Créer les trios (3 attaquants) et duos (2 défenseurs)
+fw_lines = [attaquants.iloc[i:i+3] for i in range(0, len(attaquants), 3)]
+df_lines = [defenseurs.iloc[i:i+2] for i in range(0, len(defenseurs), 2)]
 
-# Construire 4 trios d'attaquants et 4 duos de défenseurs équilibrés
-if len(fw_pool) < 12 or len(df_pool) < 8:
-    st.info("Par défaut: 12 A et 8 D pour 2 équipes (2 trios + 2 duos par équipe). Ajuste les quotas si besoin.")
+# Ignorer les groupes incomplets
+fw_lines = [g for g in fw_lines if len(g) == 3]
+df_lines = [g for g in df_lines if len(g) == 2]
 
-fw_lines = make_lines_balanced(fw_pool, role="A", line_size=3, iterations=500)
-df_lines = make_lines_balanced(df_pool, role="D", line_size=2, iterations=500)
-
-if any(len(g) != 3 for g in fw_lines) or any(len(g) != 2 for g in df_lines):
-    st.error("Impossible de former toutes les lignes (vérifie le nombre d'A et de D).")
+# Vérification minimale encore
+if len(fw_lines) < 4 or len(df_lines) < 4:
+    st.error("❌ Pas assez de trios/défenseurs pour deux équipes complètes (2 trios + 2 duos chacun).")
     st.stop()
 
-pairings = load_pairings()
-choice = combo_teams(fw_lines, df_lines, pairings, pair_penalty=1.5)
+# Attribution aléatoire équilibrée
+random.shuffle(fw_lines)
+random.shuffle(df_lines)
 
-def lines_to_names(lines):
-    return [[n for n,_ in L] for L in lines]
+# Deux équipes de 2 trios + 2 duos
+teamA_fw = fw_lines[:2]
+teamB_fw = fw_lines[2:4]
+teamA_df = df_lines[:2]
+teamB_df = df_lines[2:4]
 
-A_fw = [fw_lines[i] for i in choice.get("A_fw", []) if i < len(fw_lines)]
-B_fw = [fw_lines[i] for i in choice.get("B_fw", []) if i < len(fw_lines)]
-A_df = [df_pairs[i] for i in choice.get("A_df", []) if i < len(df_pairs)]
-B_df = [df_pairs[i] for i in choice.get("B_df", []) if i < len(df_pairs)]
+# Calcul des moyennes de talent
+def calc_avg(team_fw, team_df):
+    fw_talent = sum(team_fw[i]["talent_attaque"].mean() for i in range(len(team_fw))) / len(team_fw)
+    df_talent = sum(team_df[i]["talent_defense"].mean() for i in range(len(team_df))) / len(team_df)
+    return round((fw_talent + df_talent) / 2, 2)
 
+moy_A = calc_avg(teamA_fw, teamA_df)
+moy_B = calc_avg(teamB_fw, teamB_df)
 
-def team_total(lines):
-    return sum(sum(s for _,s in L) for L in lines)
-
-scoreA = team_total(A_fw + A_df)
-scoreB = team_total(B_fw + B_df)
-
-st.success(f"Écart total de talent: **{abs(scoreA - scoreB)}**  (A: {scoreA}  |  B: {scoreB})")
-
-# --- Mode ÉDITION ---
-st.subheader("✍️ Mode édition (facultatif)")
-
-def show_team_editor(title, fw_lines, df_lines, key_prefix):
-    st.markdown(f"### {title}")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**Trios (A)**")
-        edited_fw = []
-        for i, line in enumerate(lines_to_names(fw_lines)):
-            edited = st.multiselect(f"Trio {i+1}", options=present["nom"].tolist(), default=line, key=f"{key_prefix}_fw_{i}")
-            edited_fw.append(edited)
-    with col2:
-        st.markdown("**Duos (D)**")
-        edited_df = []
-        for i, line in enumerate(lines_to_names(df_lines)):
-            edited = st.multiselect(f"Duo {i+1}", options=present["nom"].tolist(), default=line, key=f"{key_prefix}_df_{i}")
-            edited_df.append(edited)
-    return edited_fw, edited_df
-
-A_fw_edit, A_df_edit = show_team_editor("Équipe A", A_fw, A_df, "A")
-B_fw_edit, B_df_edit = show_team_editor("Équipe B", B_fw, B_df, "B")
-
-st.caption("⚠️ Garde 3 joueurs par trio et 2 par duo, et évite les doublons entre équipes.")
-
-# recalcul des scores après édition (si tailles ok)
-def safe_total(fw_ed, df_ed):
-    ok = all(len(t)==3 for t in fw_ed) and all(len(d)==2 for d in df_ed)
-    if not ok: return None
-    # score = somme du meilleur talent selon rôle de la ligne
-    def line_score(names, role):
-        col = "talent_attaque" if role=="A" else "talent_defense"
-        sub = present.set_index("nom").reindex(names)
-        return int(sub[col].sum())
-    tot = sum(line_score(t,"A") for t in fw_ed) + sum(line_score(d,"D") for d in df_ed)
-    return tot
-
-postA = safe_total(A_fw_edit, A_df_edit)
-postB = safe_total(B_fw_edit, B_df_edit)
-if postA is not None and postB is not None:
-    st.info(f"Scores après édition → A: {postA} | B: {postB} | Écart: {abs(postA - postB)}")
-
-# --- Affichage compact des lignes choisies (avant édition) ---
-with st.expander("Voir les lignes calculées (avant édition)"):
-    def fmt(lines): return [" • ".join(f"{n} ({s})" for n,s in L) for L in lines]
-    st.write("**A — Trios:**", fmt(A_fw))
-    st.write("**A — Duos:**",  fmt(A_df))
-    st.write("**B — Trios:**", fmt(B_fw))
-    st.write("**B — Duos:**",  fmt(B_df))
-
-# --- Enregistrer dans l'historique ---
-if st.button("💾 Enregistrer ces équipes dans l’historique"):
-    # on sauve la version ÉDITÉE si elle est valide, sinon la version calculée
-    lines_A = A_fw_edit if postA is not None else lines_to_names(A_fw)
-    lines_B = B_fw_edit if postB is not None else lines_to_names(B_fw)
-    dlines_A = A_df_edit if postA is not None else lines_to_names(A_df)
-    dlines_B = B_df_edit if postB is not None else lines_to_names(B_df)
-
-    # mise à jour pairings avec TOUTES les lignes
-    update_pairings(lines_A + dlines_A + lines_B + dlines_B)
-
-    # calcul des totaux à sauver
-    def line_score(names, role):
-        col = "talent_attaque" if role=="A" else "talent_defense"
-        sub = present.set_index("nom").reindex(names)
-        return int(sub[col].sum())
-    teamA_total = sum(line_score(t,"A") for t in lines_A) + sum(line_score(d,"D") for d in dlines_A)
-    teamB_total = sum(line_score(t,"A") for t in lines_B) + sum(line_score(d,"D") for d in dlines_B)
-
-    ts = pd.Timestamp.now().isoformat(timespec="seconds")
-    rows = []
-    for i, trio in enumerate(lines_A,  start=1):
-        rows.append({"timestamp":ts,"team":"A","line_type":"F","line_index":i,"players":", ".join(trio),"team_total":teamA_total})
-    for i, duo  in enumerate(dlines_A, start=1):
-        rows.append({"timestamp":ts,"team":"A","line_type":"D","line_index":i,"players":", ".join(duo),"team_total":teamA_total})
-    for i, trio in enumerate(lines_B,  start=1):
-        rows.append({"timestamp":ts,"team":"B","line_type":"F","line_index":i,"players":", ".join(trio),"team_total":teamB_total})
-    for i, duo  in enumerate(dlines_B, start=1):
-        rows.append({"timestamp":ts,"team":"B","line_type":"D","line_index":i,"players":", ".join(duo),"team_total":teamB_total})
-
-    append_history(rows)
-    st.success("Historique mis à jour ✅")
+# Affichage clair
+st.header("🟦 Équipe A")
+for trio in teamA_fw:
+    st.write(", ".join(trio["nom"].tolist()))
+for duo in teamA_df:
+    st.
