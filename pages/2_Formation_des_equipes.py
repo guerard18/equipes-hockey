@@ -13,9 +13,9 @@ except Exception:
 
 st.title("2️⃣ Formation des équipes de hockey 🏒")
 st.markdown(
-    "Cette page forme d’abord **4 trios d’attaque** et **4 duos de défense** "
-    "ayant des moyennes de talent aussi proches que possible, puis assemble "
-    "deux équipes équilibrées à partir de ces unités."
+    "Cette page forme **4 trios d’attaque** et **4 duos de défense** équilibrés "
+    "(moyennes proches) et les répartit dans deux équipes. "
+    "Chaque clic génère une nouvelle composition aléatoire équilibrée 🎲."
 )
 
 # ------------------------------
@@ -32,7 +32,7 @@ if len(players_present) < 10:
 # ------------------------------
 # BOUTON : FORMER LES ÉQUIPES
 # ------------------------------
-if st.button("🎯 Former les équipes équilibrées"):
+if st.button("🎯 Former de nouvelles équipes équilibrées (aléatoires)"):
 
     if players_present.empty:
         st.error("❌ Aucun joueur présent.")
@@ -50,7 +50,7 @@ if st.button("🎯 Former les équipes équilibrées"):
     attaquants = players_present[players_present["poste"] == "Attaquant"].copy()
     defenseurs = players_present[players_present["poste"] == "Défenseur"].copy()
 
-    # S’il manque des joueurs dans un poste, combler avec les meilleurs restants
+    # Si manque de joueurs dans un poste, on complète avec les meilleurs de l'autre
     if len(defenseurs) < 8:
         besoin = 8 - len(defenseurs)
         supl = attaquants.nlargest(besoin, "talent_defense")
@@ -64,10 +64,12 @@ if st.button("🎯 Former les équipes équilibrées"):
         defenseurs = defenseurs.drop(supl.index)
 
     # ------------------------------
-    # FONCTION snake draft équilibrée
+    # FONCTION snake draft équilibrée + aléatoire
     # ------------------------------
     def snake_draft(df, taille_groupe, nb_groupes, colonne):
-        df = df.sort_values(colonne, ascending=False).reset_index(drop=True)
+        df = df.sample(frac=1, random_state=random.randint(0, 10000)).sort_values(
+            colonne, ascending=False
+        ).reset_index(drop=True)
         groupes = [[] for _ in range(nb_groupes)]
         sens = 1
         idx = 0
@@ -80,16 +82,15 @@ if st.button("🎯 Former les équipes équilibrées"):
             elif idx < 0:
                 sens = 1
                 idx = 0
-
         groupes_df = []
         for g in groupes:
             groupes_df.append(pd.DataFrame(g))
         return groupes_df
 
-    # Former 4 trios équilibrés
+    # Former 4 trios équilibrés mais aléatoires
     trios = snake_draft(attaquants, 3, 4, "talent_attaque")
 
-    # Former 4 duos équilibrés
+    # Former 4 duos équilibrés mais aléatoires
     duos = snake_draft(defenseurs, 2, 4, "talent_defense")
 
     # ------------------------------
@@ -105,7 +106,8 @@ if st.button("🎯 Former les équipes équilibrées"):
                 st.markdown(f"**{titre[:-1]} {i}** — Moyenne : {moyenne}")
                 for _, p in unite.iterrows():
                     st.write(f"- {p['nom']} ({p[colonne]:.1f})")
-        st.info(f"Moyenne des {titre.lower()} : {round(sum(moyennes)/len(moyennes),2)} ± {round(pd.Series(moyennes).std(),2)}")
+        if moyennes:
+            st.info(f"Moyenne des {titre.lower()} : {round(sum(moyennes)/len(moyennes),2)} ± {round(pd.Series(moyennes).std(),2)}")
 
     st.header("🔢 Lignes équilibrées créées")
     afficher_unites("Trios", trios, "talent_attaque")
@@ -114,6 +116,10 @@ if st.button("🎯 Former les équipes équilibrées"):
     # ------------------------------
     # ASSIGNATION AUX ÉQUIPES
     # ------------------------------
+    # Mélanger légèrement les lignes avant attribution pour varier les compositions
+    random.shuffle(trios)
+    random.shuffle(duos)
+
     equipeA_trios = trios[::2]
     equipeB_trios = trios[1::2]
     equipeA_duos = duos[::2]
@@ -126,29 +132,25 @@ if st.button("🎯 Former les équipes équilibrées"):
     moyA = round((moyenne_globale(equipeA_trios, "talent_attaque") + moyenne_globale(equipeA_duos, "talent_defense")) / 2, 2)
     moyB = round((moyenne_globale(equipeB_trios, "talent_attaque") + moyenne_globale(equipeB_duos, "talent_defense")) / 2, 2)
 
-    st.divider()
-    st.header("🟦 Équipe A")
-    st.write(f"**Moyenne globale :** {moyA}")
-    for i, trio in enumerate(equipeA_trios, 1):
-        st.markdown(f"**Trio {i}**")
-        for _, p in trio.iterrows():
-            st.write(f"- {p['nom']} ({p['talent_attaque']:.1f})")
-    for i, duo in enumerate(equipeA_duos, 1):
-        st.markdown(f"**Duo {i}**")
-        for _, p in duo.iterrows():
-            st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
+    # ------------------------------
+    # AFFICHAGE FINAL
+    # ------------------------------
+    def afficher_equipe(nom, trios, duos, moyenne):
+        st.header(nom)
+        st.write(f"**Moyenne globale :** {moyenne}")
+        for i, trio in enumerate(trios, 1):
+            st.markdown(f"**Trio {i} (attaque)**")
+            for _, p in trio.iterrows():
+                st.write(f"- {p['nom']} ({p['talent_attaque']:.1f})")
+        for i, duo in enumerate(duos, 1):
+            st.markdown(f"**Duo {i} (défense)**")
+            for _, p in duo.iterrows():
+                st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
 
     st.divider()
-    st.header("🟥 Équipe B")
-    st.write(f"**Moyenne globale :** {moyB}")
-    for i, trio in enumerate(equipeB_trios, 1):
-        st.markdown(f"**Trio {i}**")
-        for _, p in trio.iterrows():
-            st.write(f"- {p['nom']} ({p['talent_attaque']:.1f})")
-    for i, duo in enumerate(equipeB_duos, 1):
-        st.markdown(f"**Duo {i}**")
-        for _, p in duo.iterrows():
-            st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
+    afficher_equipe("🟦 Équipe A", equipeA_trios, equipeA_duos, moyA)
+    st.divider()
+    afficher_equipe("🟥 Équipe B", equipeB_trios, equipeB_duos, moyB)
 
     diff = abs(moyA - moyB)
     if diff < 0.5:
@@ -171,7 +173,7 @@ if st.button("🎯 Former les équipes équilibrées"):
 
         if GITHUB_OK:
             try:
-                save_to_github("data/historique.csv", "Nouvelle répartition équilibrée (trios/duos paritaires)")
+                save_to_github("data/historique.csv", "Nouvelle génération aléatoire équilibrée")
                 st.toast("💾 Sauvegarde GitHub réussie")
             except Exception as e:
                 st.warning(f"⚠️ Erreur de sauvegarde GitHub : {e}")
