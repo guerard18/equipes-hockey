@@ -1,6 +1,22 @@
 import pandas as pd
 import os
 
+def load_players():
+    path = "data/joueurs.csv"
+    if not os.path.exists(path):
+        os.makedirs("data", exist_ok=True)
+        df = pd.DataFrame(columns=["nom", "talent_attaque", "talent_defense", "present"])
+        df.to_csv(path, index=False)
+    else:
+        df = pd.read_csv(path)
+        if "present" not in df.columns:
+            df["present"] = False
+    return df
+
+def save_players(df):
+    os.makedirs("data", exist_ok=True)
+    df.to_csv("data/joueurs.csv", index=False)
+
 def save_history(equipeB, equipeN, moyB, moyN, date, triosB=None, duosB=None, triosN=None, duosN=None):
     """Sauvegarde les équipes formées dans le fichier historique"""
     path = "data/historique.csv"
