@@ -91,4 +91,29 @@ st.header("🟦 Équipe A")
 for trio in teamA_fw:
     st.write(", ".join(trio["nom"].tolist()))
 for duo in teamA_df:
-    st.
+    st.write(", ".join(duo["nom"].tolist()))
+st.write(f"**Moyenne de talent :** {moy_A}")
+
+st.header("🟥 Équipe B")
+for trio in teamB_fw:
+    st.write(", ".join(trio["nom"].tolist()))
+for duo in teamB_df:
+    st.write(", ".join(duo["nom"].tolist()))
+st.write(f"**Moyenne de talent :** {moy_B}")
+
+# Bouton pour enregistrer dans l’historique
+if st.button("💾 Enregistrer ces équipes dans l’historique"):
+    date = datetime.now().strftime("%Y-%m-%d %H:%M")
+    equipeA = [p for g in teamA_fw + teamA_df for p in g["nom"].tolist()]
+    equipeB = [p for g in teamB_fw + teamB_df for p in g["nom"].tolist()]
+
+    save_history(equipeA, equipeB, moy_A, moy_B, date)
+    st.success("✅ Équipes enregistrées dans l’historique !")
+
+    # Sauvegarde GitHub
+    if GITHUB_OK:
+        try:
+            save_to_github("data/historique.csv", "Nouvelle entrée d’historique")
+            st.toast("💾 Sauvegarde GitHub réussie")
+        except Exception as e:
+            st.warning(f"⚠️ Impossible de sauvegarder sur GitHub : {e}")
