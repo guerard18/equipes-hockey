@@ -21,13 +21,11 @@ else:
         ]
         df = df[[c for c in colonnes if c in df.columns]].sort_values("Date", ascending=False)
 
-        # Sélecteur de match
         st.subheader("📅 Choisir une date de match")
         dates = df["Date"].dropna().unique().tolist()
         date_select = st.selectbox("Match du :", dates)
         match = df[df["Date"] == date_select].iloc[0]
 
-        # En-tête
         st.markdown(f"### 🏒 Match du {match['Date']}")
         st.write(f"**Moyenne BLANCS ⚪ :** {match['Moyenne_BLANCS']}")
         st.write(f"**Moyenne NOIRS ⚫ :** {match['Moyenne_NOIRS']}")
@@ -35,7 +33,6 @@ else:
         st.divider()
         col1, col2 = st.columns(2)
 
-        # ----- BLANCS -----
         with col1:
             st.markdown("### ⚪ BLANCS")
             st.markdown("**Trios :**")
@@ -46,7 +43,6 @@ else:
             for j in match["Équipe_BLANCS"].split(", "):
                 st.write(f"- {j}")
 
-        # ----- NOIRS -----
         with col2:
             st.markdown("### ⚫ NOIRS")
             st.markdown("**Trios :**")
@@ -58,8 +54,6 @@ else:
                 st.write(f"- {j}")
 
         st.divider()
-
-        # Télécharger le match sélectionné
         st.download_button(
             label="⬇️ Télécharger ce match (CSV)",
             data=df[df["Date"] == date_select].to_csv(index=False).encode("utf-8"),
@@ -67,7 +61,6 @@ else:
             mime="text/csv"
         )
 
-        # Tableau résumé
         st.subheader("📘 Historique complet (résumé)")
         st.dataframe(
             df[["Date", "Moyenne_BLANCS", "Moyenne_NOIRS"]],
@@ -75,7 +68,6 @@ else:
             hide_index=True
         )
 
-        # Bouton pour tout effacer
         if st.button("🧹 Effacer tout l’historique"):
             os.remove(path)
             st.success("✅ Historique effacé avec succès.")
