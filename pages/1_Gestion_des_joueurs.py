@@ -10,13 +10,18 @@ try:
 except Exception:
     GITHUB_OK = False
 
+# ===============================
+# PAGE PRINCIPALE
+# ===============================
 st.title("1️⃣ Gestion des joueurs 🏒")
 st.markdown("Ajoute, édite ou gère les joueurs. Coche **Présent** pour indiquer qui est disponible aujourd’hui.")
 
 # --- Charger la liste des joueurs ---
 players = load_players()
 
-# --- Section d'ajout d'un joueur ---
+# ===============================
+# AJOUT D'UN JOUEUR
+# ===============================
 with st.expander("➕ Ajouter un nouveau joueur"):
     with st.form("add_player"):
         nom = st.text_input("Nom du joueur")
@@ -47,8 +52,28 @@ with st.expander("➕ Ajouter un nouveau joueur"):
                     except Exception as e:
                         st.warning(f"⚠️ Impossible de synchroniser sur GitHub : {e}")
 
-# --- Édition du tableau ---
+# ===============================
+# COMPTEUR DE JOUEURS PRÉSENTS
+# ===============================
+nb_total = len(players)
+nb_present = int(players["present"].sum()) if "present" in players else 0
+
+if nb_total == 0:
+    st.info("Aucun joueur enregistré pour le moment.")
+else:
+    st.markdown(
+        f"### 👥 Joueurs présents : **{nb_present} / {nb_total}** "
+        + ("✅" if nb_present > 0 else "🚫 Aucun joueur présent")
+    )
+
+    # Barre de progression colorée (optionnelle)
+    st.progress(nb_present / nb_total if nb_total > 0 else 0)
+
+# ===============================
+# TABLEAU D'ÉDITION
+# ===============================
 st.subheader("📝 Modifier les joueurs existants")
+
 edited = st.data_editor(
     players,
     num_rows="dynamic",
@@ -63,58 +88,11 @@ edited = st.data_editor(
 
 col1, col2, col3 = st.columns(3)
 
-# --- Bouton ENREGISTRER ---
+# ===============================
+# BOUTON ENREGISTRER
+# ===============================
 if col1.button("💾 Enregistrer les modifications"):
     edited = edited.copy()
     edited["nom"] = edited["nom"].astype(str).str.strip()
     edited = edited.dropna(subset=["nom"])
-    edited["talent_attaque"] = pd.to_numeric(edited["talent_attaque"], errors="coerce").fillna(5).astype(int).clip(1, 10)
-    edited["talent_defense"] = pd.to_numeric(edited["talent_defense"], errors="coerce").fillna(5).astype(int).clip(1, 10)
-    edited["present"] = edited["present"].fillna(False).astype(bool)
-
-    save_players(edited)
-    st.success("✅ Liste enregistrée avec succès.")
-
-    if GITHUB_OK:
-        try:
-            save_to_github("data/joueurs.csv", "Mise à jour de la liste des joueurs")
-        except Exception as e:
-            st.warning(f"⚠️ Impossible de synchroniser sur GitHub : {e}")
-
-# --- Bouton REMETTRE À ZÉRO ---
-if col2.button("🔁 Remettre toutes les présences à zéro"):
-    df = load_players()
-    df["present"] = False
-    save_players(df)
-    st.session_state["reset_done"] = True  # Flag pour forcer le rerun
-
-    st.success("✅ Toutes les présences ont été remises à zéro.")
-
-    # Synchronisation GitHub (optionnelle)
-    if GITHUB_OK:
-        try:
-            save_to_github("data/joueurs.csv", "Remise à zéro des présences")
-        except Exception as e:
-            st.warning(f"⚠️ Impossible de synchroniser sur GitHub : {e}")
-
-    # Rafraîchir la page proprement
-    st.experimental_set_query_params(refresh=random.random())
-    try:
-        st.rerun()
-    except AttributeError:
-        st.experimental_rerun()
-
-# 🔄 Rafraîchissement automatique après reset
-if st.session_state.get("reset_done"):
-    st.session_state["reset_done"] = False
-    try:
-        st.rerun()
-    except AttributeError:
-        st.experimental_rerun()
-
-# --- Bouton RECHARGER ---
-if col3.button("♻️ Recharger la liste"):
-    try:
-        st.rerun()
-    except AttributeError:
-        st.experimental_rerun()
+    edited["talent_attaque"] = pd.to_numeric(edite]()
