@@ -73,3 +73,4 @@ if st.button("🏒 Créer les équipes !") and len(joueurs_saisis) >= 2:
         for j in equipe2:
             st.write(f"{j[0]} — {j[1]}")
         st.write(f"**Total talent : {total2}**")
+    
