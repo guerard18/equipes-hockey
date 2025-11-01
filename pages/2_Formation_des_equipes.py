@@ -9,8 +9,8 @@ from utils import load_players, save_history
 
 st.title("2️⃣ Formation des équipes de hockey 🏒")
 st.markdown(
-    "Forme automatiquement deux équipes équilibrées (⚪ Blanc / ⚫ Noir) "
-    "avec 4 trios et 4 duos équilibrés."
+    "Forme automatiquement deux équipes équilibrées (**BLANCS ⚪ / NOIRS ⚫**) "
+    "avec 4 trios et 4 duos équilibrés, et affiche leurs moyennes de talent."
 )
 
 # Sélecteur de date du match
@@ -39,6 +39,7 @@ def generate_teams(players_present: pd.DataFrame):
     attaquants = players_present[players_present["poste"] == "Attaquant"].copy()
     defenseurs = players_present[players_present["poste"] == "Défenseur"].copy()
 
+    # équilibrer si trop de joueurs d'un type
     if len(defenseurs) < 8:
         supl = attaquants.nlargest(8 - len(defenseurs), "talent_defense")
         defenseurs = pd.concat([defenseurs, supl])
@@ -49,6 +50,7 @@ def generate_teams(players_present: pd.DataFrame):
         attaquants = pd.concat([attaquants, supl])
         defenseurs = defenseurs.drop(supl.index)
 
+    # distribution snake draft pour équilibre
     def snake_draft(df, nb_groupes, colonne):
         if df.empty:
             return [pd.DataFrame() for _ in range(nb_groupes)]
@@ -72,8 +74,8 @@ def generate_teams(players_present: pd.DataFrame):
     random.shuffle(trios)
     random.shuffle(duos)
 
-    equipeB_trios = trios[::2]  # Blanc
-    equipeN_trios = trios[1::2] # Noir
+    equipeB_trios = trios[::2]  # BLANCS
+    equipeN_trios = trios[1::2] # NOIRS
     equipeB_duos = duos[::2]
     equipeN_duos = duos[1::2]
 
@@ -100,27 +102,63 @@ if st.button("🎯 Générer les équipes équilibrées"):
 teams = st.session_state.get("teams")
 
 if teams:
+    # ----- ÉQUIPE BLANCS -----
     st.subheader("⚪ BLANCS")
+
+    st.markdown("**Trios :**")
     for i, trio in enumerate(teams["equipeB_trios"], 1):
-        st.write(f"**Trio {i}**: {', '.join(trio['nom'])}")
+        if trio.empty:
+            continue
+        moy = round(trio["talent_attaque"].mean(), 2)
+        st.write(f"**Trio {i}** ({moy}) : {', '.join(trio['nom'])}")
+
+    st.markdown("**Duos :**")
     for i, duo in enumerate(teams["equipeB_duos"], 1):
-        st.write(f"**Duo {i}**: {', '.join(duo['nom'])}")
-    st.write(f"**Moyenne :** {teams['moyB']}")
+        if duo.empty:
+            continue
+        moy = round(duo["talent_defense"].mean(), 2)
+        st.write(f"**Duo {i}** ({moy}) : {', '.join(duo['nom'])}")
 
+    st.write(f"### Moyenne totale : {teams['moyB']}")
+
+    # ----- ÉQUIPE NOIRS -----
     st.subheader("⚫ NOIRS")
-    for i, trio in enumerate(teams["equipeN_trios"], 1):
-        st.write(f"**Trio {i}**: {', '.join(trio['nom'])}")
-    for i, duo in enumerate(teams["equipeN_duos"], 1):
-        st.write(f"**Duo {i}**: {', '.join(duo['nom'])}")
-    st.write(f"**Moyenne :** {teams['moyN']}")
 
+    st.markdown("**Trios :**")
+    for i, trio in enumerate(teams["equipeN_trios"], 1):
+        if trio.empty:
+            continue
+        moy = round(trio["talent_attaque"].mean(), 2)
+        st.write(f"**Trio {i}** ({moy}) : {', '.join(trio['nom'])}")
+
+    st.markdown("**Duos :**")
+    for i, duo in enumerate(teams["equipeN_duos"], 1):
+        if duo.empty:
+            continue
+        moy = round(duo["talent_defense"].mean(), 2)
+        st.write(f"**Duo {i}** ({moy}) : {', '.join(duo['nom'])}")
+
+    st.write(f"### Moyenne totale : {teams['moyN']}")
+
+    # --- Enregistrement dans l’historique ---
     if st.button("💾 Enregistrer dans l’historique"):
         equipeB = [p for t in (teams["equipeB_trios"] + teams["equipeB_duos"]) for p in t["nom"].tolist()]
         equipeN = [p for t in (teams["equipeN_trios"] + teams["equipeN_duos"]) for p in t["nom"].tolist()]
-        save_history(equipeB, equipeN, teams["moyB"], teams["moyN"], date_match.strftime("%Y-%m-%d"))
-        st.success("✅ Équipes enregistrées dans l’historique.")
 
-    # --- Envoi de courriel HTML ---
+        save_history(
+            equipeB, equipeN,
+            teams["moyB"], teams["moyN"],
+            date_match.strftime("%Y-%m-%d"),
+            triosB=teams["equipeB_trios"],
+            duosB=teams["equipeB_duos"],
+            triosN=teams["equipeN_trios"],
+            duosN=teams["equipeN_duos"]
+        )
+
+        st.success("✅ Équipes enregistrées dans l’historique avec détails des trios et duos.")
+
+    # --- Envoi par courriel HTML ---
+    st.divider()
     st.subheader("📧 Envoyer les équipes par courriel")
     expediteur = st.text_input("Adresse Gmail d’expéditeur")
     mot_passe = st.text_input("Mot de passe d’application Gmail", type="password")
@@ -131,16 +169,18 @@ if teams:
         <html><body>
         <h2>🏒 Match du {date_match.strftime("%Y-%m-%d")}</h2>
         <h3>⚪ BLANCS (moyenne {teams['moyB']})</h3>
-        {', '.join(equipeB)}<br><br>
+        {"<br>".join([f"Trio {i+1}: " + ", ".join(t['nom']) for i, t in enumerate(teams['equipeB_trios'])])}
+        {"<br>".join([f"Duo {i+1}: " + ", ".join(t['nom']) for i, t in enumerate(teams['equipeB_duos'])])}
         <h3>⚫ NOIRS (moyenne {teams['moyN']})</h3>
-        {', '.join(equipeN)}
+        {"<br>".join([f"Trio {i+1}: " + ", ".join(t['nom']) for i, t in enumerate(teams['equipeN_trios'])])}
+        {"<br>".join([f"Duo {i+1}: " + ", ".join(t['nom']) for i, t in enumerate(teams['equipeN_duos'])])}
         </body></html>
         """
         try:
             msg = MIMEMultipart("alternative")
             msg["From"] = expediteur
             msg["To"] = destinataires
-            msg["Subject"] = f"🏒 Match du {date_match.strftime('%Y-%m-%d')} - Équipes"
+            msg["Subject"] = f"🏒 Match du {date_match.strftime('%Y-%m-%d')} - Équipes BLANCS vs NOIRS"
             msg.attach(MIMEText(corps_html, "html", "utf-8"))
 
             with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
