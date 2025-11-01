@@ -1,25 +1,24 @@
 import streamlit as st
 import pandas as pd
 import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from utils import load_players, save_history
 
-# Optionnel : commit GitHub automatique
-try:
-    from github_utils import save_to_github
-    GITHUB_OK = True
-except Exception:
-    GITHUB_OK = False
-
+# ------------------------------
+# TITRE ET DESCRIPTION
+# ------------------------------
 st.title("2️⃣ Formation des équipes de hockey 🏒")
 st.markdown(
     "Cette page forme **4 trios d’attaque** et **4 duos de défense** équilibrés "
-    "(moyennes proches) et les répartit dans deux équipes. "
+    "et les répartit dans deux équipes : **⚪ Blanc** et **⚫ Noir**. "
     "Chaque clic génère une nouvelle composition aléatoire équilibrée 🎲."
 )
 
 # ------------------------------
-# Charger les joueurs présents
+# CHARGER LES JOUEURS PRÉSENTS
 # ------------------------------
 players = load_players()
 players_present = players[players["present"] == True].reset_index(drop=True)
@@ -30,7 +29,7 @@ if len(players_present) < 10:
     st.warning("⚠️ Peu de joueurs présents — les équipes seront formées quand même.")
 
 # ------------------------------
-# BOUTON : FORMER LES ÉQUIPES
+# BOUTON POUR FORMER LES ÉQUIPES
 # ------------------------------
 if st.button("🎯 Former de nouvelles équipes équilibrées (aléatoires)"):
 
@@ -38,19 +37,19 @@ if st.button("🎯 Former de nouvelles équipes équilibrées (aléatoires)"):
         st.error("❌ Aucun joueur présent.")
         st.stop()
 
-    # Déterminer la position principale
+    # Déterminer le poste principal
     players_present["poste"] = players_present.apply(
         lambda x: "Attaquant" if x["talent_attaque"] >= x["talent_defense"] else "Défenseur",
         axis=1
     )
 
-    # Calculer un score global
+    # Score global
     players_present["talent_total"] = players_present[["talent_attaque", "talent_defense"]].mean(axis=1)
 
     attaquants = players_present[players_present["poste"] == "Attaquant"].copy()
     defenseurs = players_present[players_present["poste"] == "Défenseur"].copy()
 
-    # Si manque de joueurs dans un poste, on complète avec les meilleurs de l'autre
+    # Compléter si un poste est sous-représenté
     if len(defenseurs) < 8:
         besoin = 8 - len(defenseurs)
         supl = attaquants.nlargest(besoin, "talent_defense")
@@ -64,9 +63,9 @@ if st.button("🎯 Former de nouvelles équipes équilibrées (aléatoires)"):
         defenseurs = defenseurs.drop(supl.index)
 
     # ------------------------------
-    # FONCTION snake draft équilibrée + aléatoire
+    # Snake draft équilibré aléatoire
     # ------------------------------
-    def snake_draft(df, taille_groupe, nb_groupes, colonne):
+    def snake_draft(df, nb_groupes, colonne):
         df = df.sample(frac=1, random_state=random.randint(0, 10000)).sort_values(
             colonne, ascending=False
         ).reset_index(drop=True)
@@ -82,61 +81,52 @@ if st.button("🎯 Former de nouvelles équipes équilibrées (aléatoires)"):
             elif idx < 0:
                 sens = 1
                 idx = 0
-        groupes_df = []
-        for g in groupes:
-            groupes_df.append(pd.DataFrame(g))
-        return groupes_df
+        return [pd.DataFrame(g) for g in groupes]
 
-    # Former 4 trios équilibrés mais aléatoires
-    trios = snake_draft(attaquants, 3, 4, "talent_attaque")
-
-    # Former 4 duos équilibrés mais aléatoires
-    duos = snake_draft(defenseurs, 2, 4, "talent_defense")
+    trios = snake_draft(attaquants, 4, "talent_attaque")
+    duos = snake_draft(defenseurs, 4, "talent_defense")
 
     # ------------------------------
-    # AFFICHER LES LIGNES ET MOYENNES
+    # AFFICHER LES UNITÉS
     # ------------------------------
     def afficher_unites(titre, unites, colonne):
         st.subheader(titre)
         moyennes = []
         for i, unite in enumerate(unites, 1):
-            if not unite.empty:
-                moyenne = round(unite[colonne].mean(), 2)
-                moyennes.append(moyenne)
-                st.markdown(f"**{titre[:-1]} {i}** — Moyenne : {moyenne}")
-                for _, p in unite.iterrows():
-                    st.write(f"- {p['nom']} ({p[colonne]:.1f})")
-        if moyennes:
-            st.info(f"Moyenne des {titre.lower()} : {round(sum(moyennes)/len(moyennes),2)} ± {round(pd.Series(moyennes).std(),2)}")
+            moyenne = round(unite[colonne].mean(), 2)
+            moyennes.append(moyenne)
+            st.markdown(f"**{titre[:-1]} {i}** — Moyenne : {moyenne}")
+            for _, p in unite.iterrows():
+                st.write(f"- {p['nom']} ({p[colonne]:.1f})")
+        st.info(f"Moyenne {titre.lower()} : {round(sum(moyennes)/len(moyennes),2)} ± {round(pd.Series(moyennes).std(),2)}")
 
     st.header("🔢 Lignes équilibrées créées")
     afficher_unites("Trios", trios, "talent_attaque")
     afficher_unites("Duos", duos, "talent_defense")
 
     # ------------------------------
-    # ASSIGNATION AUX ÉQUIPES
+    # DISTRIBUTION ÉQUILIBRÉE BLANC/NOIR
     # ------------------------------
-    # Mélanger légèrement les lignes avant attribution pour varier les compositions
     random.shuffle(trios)
     random.shuffle(duos)
 
-    equipeA_trios = trios[::2]
-    equipeB_trios = trios[1::2]
-    equipeA_duos = duos[::2]
-    equipeB_duos = duos[1::2]
+    equipeB_trios = trios[::2]  # Blanc
+    equipeN_trios = trios[1::2]  # Noir
+    equipeB_duos = duos[::2]
+    equipeN_duos = duos[1::2]
 
     def moyenne_globale(unites, colonne):
         valeurs = [u[colonne].mean() for u in unites if not u.empty]
         return round(sum(valeurs) / len(valeurs), 2) if valeurs else 0
 
-    moyA = round((moyenne_globale(equipeA_trios, "talent_attaque") + moyenne_globale(equipeA_duos, "talent_defense")) / 2, 2)
     moyB = round((moyenne_globale(equipeB_trios, "talent_attaque") + moyenne_globale(equipeB_duos, "talent_defense")) / 2, 2)
+    moyN = round((moyenne_globale(equipeN_trios, "talent_attaque") + moyenne_globale(equipeN_duos, "talent_defense")) / 2, 2)
 
     # ------------------------------
-    # AFFICHAGE FINAL
+    # AFFICHAGE DES ÉQUIPES
     # ------------------------------
-    def afficher_equipe(nom, trios, duos, moyenne):
-        st.header(nom)
+    def afficher_equipe(nom, trios, duos, moyenne, couleur):
+        st.markdown(f"<h2 style='color:{couleur}'>{nom}</h2>", unsafe_allow_html=True)
         st.write(f"**Moyenne globale :** {moyenne}")
         for i, trio in enumerate(trios, 1):
             st.markdown(f"**Trio {i} (attaque)**")
@@ -148,11 +138,11 @@ if st.button("🎯 Former de nouvelles équipes équilibrées (aléatoires)"):
                 st.write(f"- {p['nom']} ({p['talent_defense']:.1f})")
 
     st.divider()
-    afficher_equipe("🟦 Équipe A", equipeA_trios, equipeA_duos, moyA)
+    afficher_equipe("⚪ Équipe Blanche", equipeB_trios, equipeB_duos, moyB, "gray")
     st.divider()
-    afficher_equipe("🟥 Équipe B", equipeB_trios, equipeB_duos, moyB)
+    afficher_equipe("⚫ Équipe Noire", equipeN_trios, equipeN_duos, moyN, "black")
 
-    diff = abs(moyA - moyB)
+    diff = abs(moyB - moyN)
     if diff < 0.5:
         st.success("⚖️ Les équipes sont très équilibrées !")
     elif diff < 1:
@@ -161,19 +151,69 @@ if st.button("🎯 Former de nouvelles équipes équilibrées (aléatoires)"):
         st.warning("🔴 Les équipes sont un peu déséquilibrées.")
 
     # ------------------------------
-    # SAUVEGARDE
+    # SAUVEGARDE DANS L’HISTORIQUE
     # ------------------------------
     if st.button("💾 Enregistrer ces équipes dans l’historique"):
         date = datetime.now().strftime("%Y-%m-%d %H:%M")
-        equipeA = [p for trio in equipeA_trios + equipeA_duos for p in trio["nom"].tolist()]
         equipeB = [p for trio in equipeB_trios + equipeB_duos for p in trio["nom"].tolist()]
+        equipeN = [p for trio in equipeN_trios + equipeN_duos for p in trio["nom"].tolist()]
 
-        save_history(equipeA, equipeB, moyA, moyB, date)
+        save_history(equipeB, equipeN, moyB, moyN, date)
         st.success("✅ Équipes enregistrées dans l’historique !")
 
-        if GITHUB_OK:
-            try:
-                save_to_github("data/historique.csv", "Nouvelle génération aléatoire équilibrée")
-                st.toast("💾 Sauvegarde GitHub réussie")
-            except Exception as e:
-                st.warning(f"⚠️ Erreur de sauvegarde GitHub : {e}")
+    # ------------------------------
+    # ENVOYER PAR COURRIEL HTML
+    # ------------------------------
+    st.divider()
+    st.subheader("📧 Envoyer les équipes par courriel")
+
+    with st.expander("Configurer et envoyer"):
+        expediteur = st.text_input("Adresse d’expéditeur (ex: tonadresse@gmail.com)")
+        mot_passe = st.text_input("Mot de passe d’application Gmail", type="password")
+        destinataires = st.text_area("Destinataires (séparés par des virgules)", "ex: capitaine1@gmail.com, capitaine2@gmail.com")
+
+        sujet = "Composition des équipes Hockey ⚪ Blanc vs ⚫ Noir"
+
+        def creer_tableau(titre, trios, duos, couleur):
+            html = f"<h3 style='color:{couleur}'>{titre}</h3><table border='1' cellspacing='0' cellpadding='6' style='border-collapse:collapse;'>"
+            html += "<tr><th>Type</th><th>Joueurs</th></tr>"
+            for i, trio in enumerate(trios, 1):
+                joueurs = ", ".join(trio["nom"].tolist())
+                html += f"<tr><td>Trio {i}</td><td>{joueurs}</td></tr>"
+            for i, duo in enumerate(duos, 1):
+                joueurs = ", ".join(duo["nom"].tolist())
+                html += f"<tr><td>Duo {i}</td><td>{joueurs}</td></tr>"
+            html += "</table>"
+            return html
+
+        corps_html = f"""
+        <html>
+        <body style='font-family:Arial, sans-serif;'>
+        <h2>🏒 Composition des équipes du {datetime.now().strftime("%Y-%m-%d %H:%M")}</h2>
+        <p><b>Moyenne Équipe Blanche :</b> {moyB} — <b>Moyenne Équipe Noire :</b> {moyN}</p>
+        {creer_tableau('⚪ Équipe Blanche', equipeB_trios, equipeB_duos, 'gray')}
+        <br>
+        {creer_tableau('⚫ Équipe Noire', equipeN_trios, equipeN_duos, 'black')}
+        <p style='margin-top:20px;'>Envoyé automatiquement par l'application <b>HockeyApp</b>.</p>
+        </body>
+        </html>
+        """
+
+        if st.button("📨 Envoyer le courriel HTML"):
+            if not expediteur or not mot_passe or not destinataires:
+                st.error("❌ Remplis tous les champs avant d’envoyer.")
+            else:
+                try:
+                    msg = MIMEMultipart("alternative")
+                    msg["From"] = expediteur
+                    msg["To"] = destinataires
+                    msg["Subject"] = sujet
+                    msg.attach(MIMEText(corps_html, "html", "utf-8"))
+
+                    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                        server.login(expediteur, mot_passe)
+                        server.send_message(msg)
+
+                    st.success(f"✅ Courriel HTML envoyé à : {destinataires}")
+                except Exception as e:
+                    st.error(f"⚠️ Erreur d’envoi : {e}")
