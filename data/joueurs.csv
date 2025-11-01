@@ -1,9 +1,9 @@
-﻿nom,talent_attaque,talent_defense,present
-SIMON GODON-BOISCLAIR,5,5,False
-WILLIAM GUERARD,5,5,False
-LUKAS GUERARD,5,5,False
+nom,talent_attaque,talent_defense,present
+SIMON GODON-BOISCLAIR,8,5,False
+WILLIAM GUERARD,5,8,False
+LUKAS GUERARD,8,5,False
 NOEMIE GENDRON,5,5,False
-FELIX GENDRON,5,5,False
+FELIX GENDRON,8,5,False
 SERGE VACHON,5,5,False
 FRANCIS DESROCHERS,5,5,False
 THOMAS LAPOINTE,5,5,False
