@@ -61,10 +61,11 @@ choice = combo_teams(fw_lines, df_lines, pairings, pair_penalty=1.5)
 def lines_to_names(lines):
     return [[n for n,_ in L] for L in lines]
 
-A_fw = [fw_lines[i] for i in choice["A_fw"]]
-B_fw = [fw_lines[i] for i in choice["B_fw"]]
-A_df = [df_lines[i] for i in choice["A_df"]]
-B_df = [df_lines[i] for i in choice["B_df"]]
+A_fw = [fw_lines[i] for i in choice.get("A_fw", []) if i < len(fw_lines)]
+B_fw = [fw_lines[i] for i in choice.get("B_fw", []) if i < len(fw_lines)]
+A_df = [df_pairs[i] for i in choice.get("A_df", []) if i < len(df_pairs)]
+B_df = [df_pairs[i] for i in choice.get("B_df", []) if i < len(df_pairs)]
+
 
 def team_total(lines):
     return sum(sum(s for _,s in L) for L in lines)
