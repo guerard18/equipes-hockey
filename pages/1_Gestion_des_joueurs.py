@@ -40,6 +40,21 @@ edited = st.data_editor(
 
 col1, col2 = st.columns(2)
 if col1.button("💾 Enregistrer les modifications"):
+    import pandas as pd
+from github_utils import save_to_github
+
+# Bouton pour remettre à zéro les présences
+if st.button("🔁 Remettre toutes les présences à zéro"):
+    df["present"] = False  # remet toutes les cases à False
+    df.to_csv("data/joueurs.csv", index=False, encoding="utf-8-sig")
+    st.success("✅ Toutes les présences ont été remises à zéro.")
+    
+    # Sauvegarde GitHub automatique si activée
+    try:
+        save_to_github("data/joueurs.csv", "Remise à zéro des présences")
+    except Exception as e:
+        st.warning(f"⚠️ Impossible de synchroniser sur GitHub : {e}")
+
     # Nettoyage
     edited["nom"] = edited["nom"].astype(str).str.strip()
     edited = edited.dropna(subset=["nom"])
