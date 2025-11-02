@@ -61,25 +61,25 @@ def generer_equipes_tournoi(players_present):
     attaquants = players_present[players_present["poste"] == "Attaquant"].copy()
     defenseurs = players_present[players_present["poste"] == "Défenseur"].copy()
 
-    # Équilibrage des rôles
-    if len(defenseurs) < 8:
-        supl = attaquants.nlargest(8 - len(defenseurs), "talent_defense")
-        defenseurs = pd.concat([defenseurs, supl])
-        attaquants = attaquants.drop(supl.index)
-
-    if len(attaquants) < 12:
-        supl = defenseurs.nlargest(12 - len(attaquants), "talent_attaque")
+    # Vérifier qu'on a assez de joueurs
+    if len(attaquants) < 24:
+        supl = defenseurs.nlargest(24 - len(attaquants), "talent_attaque")
         attaquants = pd.concat([attaquants, supl])
         defenseurs = defenseurs.drop(supl.index)
 
-    # Formation des trios et duos
-    trios = snake_draft(attaquants, 8, "talent_attaque")  # 8 trios pour 4 équipes
-    duos = snake_draft(defenseurs, 8, "talent_defense")   # 8 duos pour 4 équipes
+    if len(defenseurs) < 16:
+        supl = attaquants.nlargest(16 - len(defenseurs), "talent_defense")
+        defenseurs = pd.concat([defenseurs, supl])
+        attaquants = attaquants.drop(supl.index)
+
+    # 8 trios (pour 4 équipes, 2 chacun)
+    trios = snake_draft(attaquants, 8, "talent_attaque")
+    duos = snake_draft(defenseurs, 8, "talent_defense")
 
     random.shuffle(trios)
     random.shuffle(duos)
 
-    # Attribution : 2 trios et 2 duos par équipe
+    # Attribution 2 trios + 2 duos par équipe
     equipes = {
         "BLANCS ⚪": {"trios": trios[0:2], "duos": duos[0:2]},
         "NOIRS ⚫": {"trios": trios[2:4], "duos": duos[2:4]},
@@ -87,7 +87,7 @@ def generer_equipes_tournoi(players_present):
         "VERTS 🟢": {"trios": trios[6:8], "duos": duos[6:8]},
     }
 
-    # Calcul des moyennes
+    # Calcul des moyennes de talent
     for nom, eq in equipes.items():
         moy_trios = [t["talent_attaque"].mean() for t in eq["trios"] if not t.empty]
         moy_duos = [d["talent_defense"].mean() for d in eq["duos"] if not d.empty]
