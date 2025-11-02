@@ -122,43 +122,43 @@ if df.empty:
 
 standings = compute_standings(df)
 edited = False
+champion_temp = ""
+
 st.subheader("🗓️ Horaire & Résultats")
 
 for idx, row in df.iterrows():
-    # --- Bouton avant la première demi-finale ---
+    # Bouton avant la demi
     if row["Phase"] == "Demi-finale" and idx > 0 and df.iloc[idx - 1]["Phase"] != "Demi-finale":
         colA, colB = st.columns([4, 2])
         with colA:
-            st.info("⚙️ Cliquez sur le bouton pour mettre à jour les équipes de demi-finale (après la ronde).")
+            st.info("⚙️ Cliquez pour mettre à jour les équipes de demi-finale après la ronde.")
         with colB:
             if st.button("🔁 Mettre à jour les demi-finales maintenant"):
                 ronde = df[(df["Phase"] == "Ronde") & (df["Type"] == "Match")]
                 if not ronde.empty and ronde["Terminé"].all():
                     new_df = update_semifinals_names(df.copy(), standings)
                     save_bracket(new_df)
-                    st.success("✅ Demi-finales mises à jour avec les vraies équipes.")
+                    st.success("✅ Demi-finales mises à jour.")
                     st.rerun()
                 else:
                     st.warning("⚠️ Tous les matchs de ronde ne sont pas terminés.")
 
-    # --- Bouton avant la finale ---
+    # Bouton avant la finale
     if row["Phase"] == "Finale" and idx > 0 and df.iloc[idx - 1]["Phase"] != "Finale":
         colA, colB = st.columns([4, 2])
         with colA:
-            st.info("🏆 Cliquez sur le bouton pour générer automatiquement la finale après les demi-finales.")
+            st.info("🏆 Cliquez pour générer automatiquement la finale après les demi-finales.")
         with colB:
             if st.button("🔁 Mettre à jour la finale maintenant"):
                 new_df = update_final_names(df.copy())
                 save_bracket(new_df)
-                st.success("✅ Finale mise à jour avec les gagnants des demi-finales.")
+                st.success("✅ Finale mise à jour avec les gagnants.")
                 st.rerun()
 
-    # --- Affichage pause ---
     if row["Type"] == "Pause":
         st.markdown(f"**{row['Heure']} — {row['Équipe A']}** ({int(row['Durée (min)'])} min)")
         continue
 
-    # --- Matchs normaux ---
     col1, col2, col3, col4, col5 = st.columns([2, 3, 3, 2, 3])
     with col1:
         st.write(f"**{row['Heure']}**")
@@ -169,34 +169,28 @@ for idx, row in df.iterrows():
     with col3:
         st.write(row["Équipe B"])
         sb = st.number_input("", 0, 99, int(row["Score B"]), key=f"sb_{idx}")
-
     with col4:
         if row["Phase"] == "Ronde":
             ot = st.checkbox("Prolongation", value=row["Prolongation"], key=f"ot_{idx}")
         else:
             ot = False
         done = st.checkbox("Terminé", value=row["Terminé"], key=f"tm_{idx}")
-
     with col5:
         if st.button("💾 Enregistrer", key=f"save_{idx}"):
             df.at[idx, "Score A"], df.at[idx, "Score B"] = sa, sb
             df.at[idx, "Prolongation"], df.at[idx, "Terminé"] = ot, done
+            save_bracket(df)
             edited = True
 
+            # 🎉 Affiche confettis si la finale est terminée immédiatement
+            if row["Phase"] == "Finale" and done:
+                champion_temp = row["Équipe A"] if sa > sb else row["Équipe B"]
+
 if edited:
-    save_bracket(df)
     st.success("✅ Résultats enregistrés.")
-    df = load_bracket()
 
-# ---------- Classement ----------
-st.subheader("📊 Classement (Ronde)")
-if standings.empty:
-    st.info("Entrez les scores de la ronde pour générer le classement.")
-else:
-    st.dataframe(standings, use_container_width=True)
-
-# ---------- Champion ----------
-champ = champion_if_ready(df)
+# ---------- Champion immédiat (sans rechargement) ----------
+champ = champion_temp or champion_if_ready(df)
 if champ:
     st.markdown(
         f"""
@@ -217,16 +211,8 @@ if champ:
             text-shadow: 2px 2px 5px #B8860B;
             margin-top: 40px;
         }}
-        .subtitle {{
-            text-align: center;
-            color: #FFD700;
-            font-size: 30px;
-            text-shadow: 1px 1px 3px #B8860B;
-            margin-bottom: 60px;
-        }}
         </style>
         <div class="champion">🏆 {champ} 🏆</div>
-        <div class="subtitle">Champion du tournoi!</div>
 
         <canvas id="confetti-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;"></canvas>
 
@@ -278,12 +264,10 @@ if champ:
             drawConfetti();
             requestAnimationFrame(animateConfetti);
         }}
-        window.onload = function() {{
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            createConfetti();
-            animateConfetti();
-        }};
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        createConfetti();
+        animateConfetti();
         </script>
         """,
         unsafe_allow_html=True
