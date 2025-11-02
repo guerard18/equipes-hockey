@@ -29,7 +29,7 @@ st.info(f"✅ {len(players_present)} joueurs présents sélectionnés")
 if len(players_present) < 10:
     st.warning("⚠️ Peu de joueurs présents — la formation sera approximative.")
 
-# --- Snake draft pour équilibrer ---
+# --- Snake draft équilibré ---
 def snake_draft(df, nb_groupes, colonne):
     if df.empty:
         return [pd.DataFrame() for _ in range(nb_groupes)]
@@ -45,7 +45,7 @@ def snake_draft(df, nb_groupes, colonne):
             sens, idx = 1, 0
     return [pd.DataFrame(g) for g in groupes]
 
-# --- Création des équipes ---
+# --- Génération des équipes équilibrées ---
 def generer_equipes_tournoi(players_present):
     players_present = players_present.copy()
     players_present["poste"] = players_present.apply(
@@ -59,8 +59,8 @@ def generer_equipes_tournoi(players_present):
     if len(attaquants) < 24:
         supl = defenseurs.nlargest(24 - len(attaquants), "talent_attaque")
         attaquants = pd.concat([attaquants, supl])
-        defenseurs = defenseeurs.drop(supl.index)
-    if len(defenseurs) < 16:
+        defenseeurs = defenseeurs.drop(supl.index)
+    if len(defenseeurs) < 16:
         supl = attaquants.nlargest(16 - len(defenseeurs), "talent_defense")
         defenseeurs = pd.concat([defenseeurs, supl])
         attaquants = attaquants.drop(supl.index)
@@ -110,9 +110,8 @@ if equipes:
     finale_duration = st.number_input("Durée de la finale (minutes)", 10, 120, 35, 5)
     pause = st.number_input("Pause entre les matchs (minutes)", 0, 60, 5, 5)
     zamboni_pause = st.number_input("Durée de la pause Zamboni (minutes)", 5, 30, 10, 5)
-    zamboni_every = st.number_input("Pause Zamboni après combien de matchs ?", 2, 6, 3, 1)
 
-    # --- Création des matchs ---
+    # --- Création complète du tournoi ---
     def generer_matchs_equilibres(equipes):
         noms = list(equipes.keys())
         matchs_possibles = list(itertools.combinations(noms, 2))
@@ -123,6 +122,9 @@ if equipes:
 
         heure = datetime.combine(datetime.today(), start_time)
         rows = []
+        match_counter = 0  # compteur global pour pauses Zamboni
+
+        # --- Matchs de ronde ---
         for i, row in matchs.iterrows():
             rows.append({
                 "Heure": heure.strftime("%H:%M"),
@@ -133,7 +135,8 @@ if equipes:
                 "Type": "Match"
             })
             heure += timedelta(minutes=match_duration + pause)
-            if (i + 1) % zamboni_every == 0 and i + 1 < len(matchs):
+            match_counter += 1
+            if match_counter % 3 == 0:
                 rows.append({
                     "Heure": heure.strftime("%H:%M"),
                     "Équipe A": "🧊 Pause Zamboni",
@@ -144,30 +147,30 @@ if equipes:
                 })
                 heure += timedelta(minutes=zamboni_pause)
 
-        # Demi-finales
+        # --- Demi-finales ---
         for j in range(2):
             rows.append({
                 "Heure": heure.strftime("%H:%M"),
-                "Équipe A": f"Demi-finale {j+1} - 1er vs 4e" if j == 0 else "Demi-finale 2 - 2e vs 3e",
+                "Équipe A": f"Demi-finale {j+1} - {'1er vs 4e' if j == 0 else '2e vs 3e'}",
                 "Équipe B": "",
                 "Durée (min)": demi_duration,
                 "Phase": "Demi-finale",
                 "Type": "Match"
             })
             heure += timedelta(minutes=demi_duration + pause)
+            match_counter += 1
+            if match_counter % 3 == 0:
+                rows.append({
+                    "Heure": heure.strftime("%H:%M"),
+                    "Équipe A": "🧊 Pause Zamboni",
+                    "Équipe B": "",
+                    "Durée (min)": zamboni_pause,
+                    "Phase": "",
+                    "Type": "Pause"
+                })
+                heure += timedelta(minutes=zamboni_pause)
 
-        # Pause avant la finale
-        rows.append({
-            "Heure": heure.strftime("%H:%M"),
-            "Équipe A": "🧊 Pause avant finale",
-            "Équipe B": "",
-            "Durée (min)": 10,
-            "Phase": "",
-            "Type": "Pause"
-        })
-        heure += timedelta(minutes=10)
-
-        # Finale
+        # --- Finale ---
         rows.append({
             "Heure": heure.strftime("%H:%M"),
             "Équipe A": "🏆 Finale - Gagnants demi-finales",
@@ -176,21 +179,31 @@ if equipes:
             "Phase": "Finale",
             "Type": "Match"
         })
+        heure += timedelta(minutes=finale_duration + pause)
+        match_counter += 1
+        if match_counter % 3 == 0:
+            rows.append({
+                "Heure": heure.strftime("%H:%M"),
+                "Équipe A": "🧊 Pause Zamboni",
+                "Équipe B": "",
+                "Durée (min)": zamboni_pause,
+                "Phase": "",
+                "Type": "Pause"
+            })
 
         return pd.DataFrame(rows)
 
+    # --- Bouton principal ---
     if st.button("🏁 Créer le tournoi complet"):
         with st.spinner("⏳ Génération du tournoi..."):
             matchs = generer_matchs_equilibres(equipes)
             matchs.to_csv(BRACKET_FILE, index=False)
 
-        st.success("✅ Tournoi complet créé ! Consulte **Tournoi en cours** pour le suivi.")
+        st.success("✅ Tournoi complet créé avec pauses Zamboni automatiques !")
         st.balloons()
 
         st.markdown("### 🕓 Horaire du tournoi")
-        df_affiche = matchs.copy()
-        df_affiche.index = [f"Événement {i+1}" for i in range(len(df_affiche))]
-        st.dataframe(df_affiche[["Heure", "Équipe A", "Équipe B", "Durée (min)", "Phase", "Type"]])
+        st.dataframe(matchs[["Heure", "Équipe A", "Équipe B", "Durée (min)", "Phase", "Type"]])
 
         # --- PDF ---
         st.subheader("📄 Télécharger le PDF")
