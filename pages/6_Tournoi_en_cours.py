@@ -130,31 +130,32 @@ def afficher_bracket():
     ax.set_ylim(0, 10)
     ax.axis("off")
 
-    # --- Lignes du bracket ---
-    # Demi 1
+    # Lignes du bracket
     ax.plot([1, 2], [8, 8], color="black")
     ax.plot([1, 2], [6, 6], color="black")
     ax.plot([2, 2], [6, 8], color="black")
-    # Demi 2
+
     ax.plot([1, 2], [4, 4], color="black")
     ax.plot([1, 2], [2, 2], color="black")
     ax.plot([2, 2], [2, 4], color="black")
-    # Vers finale
+
     ax.plot([2, 4], [7, 7], color="black")
     ax.plot([2, 4], [3, 3], color="black")
     ax.plot([4, 4], [3, 7], color="black")
-    # Finale + champion
+
     ax.plot([4, 6], [5, 5], color="black")
     ax.plot([6, 6], [4, 6], color="black")
     ax.plot([6, 7.5], [5, 5], color="black")
-    ax.add_patch(mpatches.Rectangle((7.5, 4.5), 1.8, 1, fill=True, color="lightgray", ec="black"))
-    ax.text(8.4, 5, "CHAMPION", va="center", ha="center", fontsize=10, fontweight="bold")
 
-    # Titres
+    # Case champion
+    ax.add_patch(mpatches.Rectangle((7.5, 4.5), 1.8, 1, fill=True, color="lightgray", ec="black"))
+    ax.text(8.4, 5.1, "CHAMPION", va="center", ha="center", fontsize=11, fontweight="bold")
+
+    # Titres des phases
     ax.text(1.5, 9.3, "DEMI-FINALES", ha="center", fontsize=12, fontweight="bold")
     ax.text(5, 8.8, "FINALE", ha="center", fontsize=12, fontweight="bold")
 
-    # --- Remplissage des équipes ---
+    # Récupération des données
     demis = edited[edited["Phase"] == "Demi"]
     finale = edited[edited["Phase"] == "Finale"]
 
@@ -164,7 +165,7 @@ def afficher_bracket():
         ax.text(1.3, 8.1, m1["Équipe A"], va="bottom", ha="left", fontsize=9)
         ax.text(1.3, 5.9, m1["Équipe B"], va="top", ha="left", fontsize=9)
         if m1.get("Terminé", False):
-            ax.text(3.0, 7.0, f"{m1['Score A']}-{m1['Score B']}", ha="center", va="center", fontsize=10)
+            ax.text(3.0, 7.3, f"{m1['Score A']}-{m1['Score B']}", ha="center", va="center", fontsize=12, fontweight="bold")
 
     # Demi 2
     if len(demis) > 1:
@@ -172,15 +173,21 @@ def afficher_bracket():
         ax.text(1.3, 4.1, m2["Équipe A"], va="bottom", ha="left", fontsize=9)
         ax.text(1.3, 1.9, m2["Équipe B"], va="top", ha="left", fontsize=9)
         if m2.get("Terminé", False):
-            ax.text(3.0, 3.0, f"{m2['Score A']}-{m2['Score B']}", ha="center", va="center", fontsize=10)
+            ax.text(3.0, 3.3, f"{m2['Score A']}-{m2['Score B']}", ha="center", va="center", fontsize=12, fontweight="bold")
 
     # Finale
+    champion_name = ""
     if not finale.empty:
         f = finale.iloc[0]
         ax.text(4.3, 6.1, f["Équipe A"], va="bottom", ha="left", fontsize=9)
         ax.text(4.3, 3.9, f["Équipe B"], va="top", ha="left", fontsize=9)
         if f.get("Terminé", False):
-            ax.text(5.3, 5.0, f"{f['Score A']}-{f['Score B']}", ha="center", va="center", fontsize=10)
+            ax.text(5.3, 5.3, f"{f['Score A']}-{f['Score B']}", ha="center", va="center", fontsize=13, fontweight="bold")
+            champion_name = f["Équipe A"] if f["Score A"] > f["Score B"] else f["Équipe B"]
+
+    # Nom du champion sous la case
+    if champion_name:
+        ax.text(8.4, 4.3, champion_name, va="top", ha="center", fontsize=11, fontweight="bold", color="darkblue")
 
     st.pyplot(fig)
 
