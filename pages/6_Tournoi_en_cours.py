@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import json
+import locale
 from datetime import datetime
 
 st.set_page_config(page_title="Tournoi en cours", page_icon="🏒", layout="centered")
@@ -37,20 +38,27 @@ def load_bracket():
 def save_bracket(df):
     df[COLS].to_csv(BRACKET_FILE, index=False)
 
-# ---------- Charger la date du tournoi ----------
+# ---------- Charger la date du tournoi (en français) ----------
 def load_tournament_date():
+    try:
+        locale.setlocale(locale.LC_TIME, 'fr_CA.UTF-8')
+    except:
+        try:
+            locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
+        except:
+            locale.setlocale(locale.LC_TIME, '')
     if os.path.exists(INFO_FILE):
         with open(INFO_FILE, "r") as f:
             info = json.load(f)
         try:
             d = datetime.strptime(info["date_tournoi"], "%Y-%m-%d")
-            return d.strftime("%A %d %B %Y")
+            return d.strftime("%A %d %B %Y").capitalize()
         except:
             return "Date non valide"
     return "Date inconnue"
 
 date_tournoi = load_tournament_date()
-st.markdown(f"### 📅 Tournoi du **{date_tournoi.capitalize()}**")
+st.markdown(f"### 📅 Tournoi du **{date_tournoi}**")
 
 # ---------- Calcul du classement ----------
 def compute_standings(df: pd.DataFrame) -> pd.DataFrame:
@@ -191,7 +199,7 @@ for idx, row in df.iterrows():
             save_bracket(df)
             edited = True
 
-            # 🎉 Afficher confettis si finale terminée
+            # 🎉 Confettis si finale terminée
             if row["Phase"] == "Finale" and done:
                 champion_temp = row["Équipe A"] if sa > sb else row["Équipe B"]
 
