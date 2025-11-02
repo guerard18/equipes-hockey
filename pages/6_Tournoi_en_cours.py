@@ -53,17 +53,6 @@ for col in ["Score A", "Score B", "Gagnant", "Prolongation"]:
         else:
             matchs[col] = ""
 
-# --- Boutons au-dessus des phases ---
-if any(matchs["Phase"].str.contains("Demi-finale", na=False)):
-    st.markdown("### ⚙️ Mettre à jour les demi-finales")
-    if st.button("🔁 Mettre à jour maintenant"):
-        st.session_state["update_demi"] = True
-
-if any(matchs["Phase"].str.contains("Finale", na=False)):
-    st.markdown("### 🏆 Mettre à jour la finale")
-    if st.button("🔁 Mettre à jour la finale maintenant"):
-        st.session_state["update_finale"] = True
-
 # --- Saisie des résultats ---
 st.divider()
 st.subheader("🕓 Horaire et résultats des matchs")
@@ -71,7 +60,7 @@ st.subheader("🕓 Horaire et résultats des matchs")
 for i, row in matchs.iterrows():
     heure = "" if pd.isna(row["Heure"]) else str(row["Heure"]).strip()
 
-    # Phases en français
+    # Nom des phases
     if row["Phase"] == "Ronde":
         phase_label = "Ronde éliminatoire"
     elif row["Phase"] == "Demi-finale":
@@ -81,6 +70,7 @@ for i, row in matchs.iterrows():
     else:
         phase_label = row["Phase"]
 
+    # Affichage du match / pause
     st.markdown(f"### 🕓 {heure} — {phase_label}")
 
     if row["Type"] == "Match":
@@ -111,6 +101,20 @@ for i, row in matchs.iterrows():
             st.info(f"🧊 {texte_pause} ({row['Durée (min)']} minutes)")
         else:
             st.info(f"🧊 Pause ({row['Durée (min)']} minutes)")
+
+        # --- Bouton "Mettre à jour les demi-finales" juste après la pause avant les demi ---
+        if "avant la finale" not in texte_pause and any(matchs["Phase"].str.contains("Demi-finale")):
+            idx_demi = matchs[matchs["Phase"] == "Demi-finale"].index.min()
+            if i == idx_demi - 1:
+                st.markdown("### ⚙️ **Mettre à jour les demi-finales**")
+                if st.button("🔁 Mettre à jour maintenant", key="update_demi_button"):
+                    st.session_state["update_demi"] = True
+
+        # --- Bouton "Mettre à jour la finale" juste après la pause avant la finale ---
+        if "avant la finale" in texte_pause and any(matchs["Phase"].str.contains("Finale")):
+            st.markdown("### 🏆 **Mettre à jour la finale**")
+            if st.button("🔁 Mettre à jour la finale maintenant", key="update_finale_button"):
+                st.session_state["update_finale"] = True
 
 st.divider()
 if st.button("💾 Enregistrer les résultats"):
