@@ -89,13 +89,19 @@ def generate_teams(players_present: pd.DataFrame):
     moyB = round((moyenne(equipeB_trios, "talent_attaque") + moyenne(equipeB_duos, "talent_defense")) / 2, 2)
     moyN = round((moyenne(equipeN_trios, "talent_attaque") + moyenne(equipeN_duos, "talent_defense")) / 2, 2)
 
+    # compter les joueurs
+    nb_joueurs_B = sum(len(t) for t in (equipeB_trios + equipeB_duos))
+    nb_joueurs_N = sum(len(t) for t in (equipeN_trios + equipeN_duos))
+
     return dict(
         equipeB_trios=equipeB_trios,
         equipeN_trios=equipeN_trios,
         equipeB_duos=equipeB_duos,
         equipeN_duos=equipeN_duos,
         moyB=moyB,
-        moyN=moyN
+        moyN=moyN,
+        nbB=nb_joueurs_B,
+        nbN=nb_joueurs_N
     )
 
 # --- GÉNÉRATION DES ÉQUIPES ---
@@ -111,7 +117,8 @@ elif not all(k in teams for k in ["equipeB_trios", "equipeN_trios", "equipeB_duo
     st.error("⚠️ Erreur de génération : certaines données d’équipes sont manquantes.")
     st.info("Cliquez sur **🎯 Générer les équipes équilibrées** pour relancer la création.")
 else:
-    st.subheader("⚪ BLANCS")
+    # --- ÉQUIPE BLANCHE ---
+    st.subheader(f"⚪ BLANCS — {teams['nbB']} joueurs")
     for i, trio in enumerate(teams["equipeB_trios"], 1):
         if not trio.empty:
             moy = round(trio["talent_attaque"].mean(), 2)
@@ -122,7 +129,8 @@ else:
             st.write(f"**Duo {i} ({moy}) :** {', '.join(duo['nom'])}")
     st.write(f"### Moyenne totale : {teams['moyB']}")
 
-    st.subheader("⚫ NOIRS")
+    # --- ÉQUIPE NOIRE ---
+    st.subheader(f"⚫ NOIRS — {teams['nbN']} joueurs")
     for i, trio in enumerate(teams["equipeN_trios"], 1):
         if not trio.empty:
             moy = round(trio["talent_attaque"].mean(), 2)
@@ -156,7 +164,7 @@ else:
         pdf.setFont("Helvetica", 12)
 
         y = 740
-        pdf.drawString(50, y, f"⚪ BLANCS (moyenne {teams['moyB']})")
+        pdf.drawString(50, y, f"⚪ BLANCS ({teams['nbB']} joueurs, moyenne {teams['moyB']})")
         y -= 20
         for i, trio in enumerate(teams["equipeB_trios"], 1):
             pdf.drawString(60, y, f"Trio {i}: {', '.join(trio['nom'])}")
@@ -166,7 +174,7 @@ else:
             y -= 15
 
         y -= 20
-        pdf.drawString(50, y, f"⚫ NOIRS (moyenne {teams['moyN']})")
+        pdf.drawString(50, y, f"⚫ NOIRS ({teams['nbN']} joueurs, moyenne {teams['moyN']})")
         y -= 20
         for i, trio in enumerate(teams["equipeN_trios"], 1):
             pdf.drawString(60, y, f"Trio {i}: {', '.join(trio['nom'])}")
