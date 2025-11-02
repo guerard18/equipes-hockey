@@ -176,7 +176,7 @@ if not standings.empty and not demis.empty:
             new_df = update_semifinals_names(df.copy(), standings)
             save_bracket(new_df)
             st.success("✅ Demi-finales mises à jour avec les vraies équipes.")
-            st.experimental_rerun()
+           st.rerun()
         else:
             st.warning("⚠️ Tous les matchs de ronde ne sont pas terminés.")
 
@@ -195,7 +195,7 @@ if not finale.empty:
         new_df = update_final_names(df.copy())
         save_bracket(new_df)
         st.success("✅ Finale mise à jour avec les gagnants des demi-finales.")
-        st.experimental_rerun()
+        st.rerun()
 
     rf = finale.iloc[0]
     st.write(f"**Finale** — {rf['Équipe A']} vs {rf['Équipe B']} "
