@@ -125,9 +125,10 @@ edited = False
 st.subheader("🗓️ Horaire & Résultats")
 
 for idx, row in df.iterrows():
-    # Affiche le bouton avant la première demi-finale
+    # --- Bouton avant la première demi-finale ---
     if row["Phase"] == "Demi-finale" and idx > 0 and df.iloc[idx - 1]["Phase"] != "Demi-finale":
         st.markdown("#### ⚙️ Mettre à jour les demi-finales")
+        st.info("➡️ Cliquez ici lorsque tous les matchs de ronde sont terminés pour remplir automatiquement les équipes de demi-finale.")
         if st.button("🔁 Mettre à jour les demi-finales maintenant"):
             ronde = df[(df["Phase"] == "Ronde") & (df["Type"] == "Match")]
             if not ronde.empty and ronde["Terminé"].all():
@@ -138,19 +139,22 @@ for idx, row in df.iterrows():
             else:
                 st.warning("⚠️ Tous les matchs de ronde ne sont pas terminés.")
 
-    # Affiche le bouton avant la finale
+    # --- Bouton avant la finale ---
     if row["Phase"] == "Finale" and idx > 0 and df.iloc[idx - 1]["Phase"] != "Finale":
         st.markdown("#### ⚙️ Mettre à jour la finale")
+        st.info("➡️ Cliquez ici lorsque les deux demi-finales sont terminées pour remplir les équipes de la finale.")
         if st.button("🔁 Mettre à jour la finale maintenant"):
             new_df = update_final_names(df.copy())
             save_bracket(new_df)
             st.success("✅ Finale mise à jour avec les gagnants des demi-finales.")
             st.rerun()
 
+    # --- Affichage pause ---
     if row["Type"] == "Pause":
         st.markdown(f"**{row['Heure']} — {row['Équipe A']}** ({int(row['Durée (min)'])} min)")
         continue
 
+    # --- Matchs normaux ---
     col1, col2, col3, col4, col5 = st.columns([2, 3, 3, 2, 3])
     with col1:
         st.write(f"**{row['Heure']}**")
@@ -161,9 +165,14 @@ for idx, row in df.iterrows():
     with col3:
         st.write(row["Équipe B"])
         sb = st.number_input("", 0, 99, int(row["Score B"]), key=f"sb_{idx}")
+
     with col4:
-        ot = st.checkbox("Prolongation", value=row["Prolongation"], key=f"ot_{idx}")
+        if row["Phase"] == "Ronde":
+            ot = st.checkbox("Prolongation", value=row["Prolongation"], key=f"ot_{idx}")
+        else:
+            ot = False  # On cache la case pour les demi et la finale
         done = st.checkbox("Terminé", value=row["Terminé"], key=f"tm_{idx}")
+
     with col5:
         if st.button("💾 Enregistrer", key=f"save_{idx}"):
             df.at[idx, "Score A"], df.at[idx, "Score B"] = sa, sb
