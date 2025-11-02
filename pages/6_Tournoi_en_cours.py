@@ -4,7 +4,6 @@ import os
 from datetime import datetime
 
 st.set_page_config(page_title="Tournoi en cours", page_icon="🏒", layout="centered")
-
 st.title("🏒 Tournoi en cours — Résultats, Classement & Bracket")
 
 DATA_DIR = "data"
@@ -82,7 +81,7 @@ def compute_standings(df: pd.DataFrame) -> pd.DataFrame:
     clas["Rang"] = clas.index + 1
     return clas[["Rang", "Équipe", "Pts", "BP", "BC", "Diff", "V", "DP", "D", "J"]]
 
-# ---------- Mise à jour des matchs éliminatoires ----------
+# ---------- Mise à jour demi/finale ----------
 def update_semifinals_names(df, standings):
     if standings is None or standings.empty:
         return df
@@ -121,49 +120,37 @@ if df.empty:
     st.info("Aucun tournoi généré. Va dans **Génération du tournoi** pour le créer.")
     st.stop()
 
+standings = compute_standings(df)
+edited = False
 st.subheader("🗓️ Horaire & Résultats")
 
-edited = False
-standings = compute_standings(df)
-
 for idx, row in df.iterrows():
-    # Pause avant la première demi-finale
-    if row["Phase"] == "" and "Pause" in row["Type"] and idx + 1 < len(df):
-        next_row = df.iloc[idx + 1]
-        if next_row["Phase"] == "Demi-finale":
-            st.markdown(f"**{row['Heure']} — {row['Équipe A']}** ({int(row['Durée (min)'])} min)")
-            if not standings.empty:
-                st.markdown("#### ⚙️ Mettre à jour les demi-finales")
-                if st.button("🔁 Mettre à jour les demi-finales maintenant"):
-                    ronde = df[(df["Phase"] == "Ronde") & (df["Type"] == "Match")]
-                    if not ronde.empty and ronde["Terminé"].all():
-                        new_df = update_semifinals_names(df.copy(), standings)
-                        save_bracket(new_df)
-                        st.success("✅ Demi-finales mises à jour avec les vraies équipes.")
-                        st.rerun()
-                    else:
-                        st.warning("⚠️ Tous les matchs de ronde ne sont pas terminés.")
-            continue
-
-    # Pause avant la finale
-    if row["Phase"] == "" and "Pause" in row["Type"] and idx + 1 < len(df):
-        next_row = df.iloc[idx + 1]
-        if next_row["Phase"] == "Finale":
-            st.markdown(f"**{row['Heure']} — {row['Équipe A']}** ({int(row['Durée (min)'])} min)")
-            st.markdown("#### ⚙️ Mettre à jour la finale")
-            if st.button("🔁 Mettre à jour la finale maintenant"):
-                new_df = update_final_names(df.copy())
+    # Affiche le bouton avant la première demi-finale
+    if row["Phase"] == "Demi-finale" and idx > 0 and df.iloc[idx - 1]["Phase"] != "Demi-finale":
+        st.markdown("#### ⚙️ Mettre à jour les demi-finales")
+        if st.button("🔁 Mettre à jour les demi-finales maintenant"):
+            ronde = df[(df["Phase"] == "Ronde") & (df["Type"] == "Match")]
+            if not ronde.empty and ronde["Terminé"].all():
+                new_df = update_semifinals_names(df.copy(), standings)
                 save_bracket(new_df)
-                st.success("✅ Finale mise à jour avec les gagnants des demi-finales.")
+                st.success("✅ Demi-finales mises à jour avec les vraies équipes.")
                 st.rerun()
-            continue
+            else:
+                st.warning("⚠️ Tous les matchs de ronde ne sont pas terminés.")
 
-    # Affichage normal
+    # Affiche le bouton avant la finale
+    if row["Phase"] == "Finale" and idx > 0 and df.iloc[idx - 1]["Phase"] != "Finale":
+        st.markdown("#### ⚙️ Mettre à jour la finale")
+        if st.button("🔁 Mettre à jour la finale maintenant"):
+            new_df = update_final_names(df.copy())
+            save_bracket(new_df)
+            st.success("✅ Finale mise à jour avec les gagnants des demi-finales.")
+            st.rerun()
+
     if row["Type"] == "Pause":
         st.markdown(f"**{row['Heure']} — {row['Équipe A']}** ({int(row['Durée (min)'])} min)")
         continue
 
-    # Matchs
     col1, col2, col3, col4, col5 = st.columns([2, 3, 3, 2, 3])
     with col1:
         st.write(f"**{row['Heure']}**")
