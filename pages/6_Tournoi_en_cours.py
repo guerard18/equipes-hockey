@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 st.title("🏆 Tournoi en cours")
 
@@ -112,7 +113,7 @@ if not classement.empty and "Demi" not in edited["Phase"].values:
             updated = pd.concat([edited, new_matches], ignore_index=True)
             updated.to_csv(BRACKET_PATH, index=False)
             st.success("✅ Demi-finales générées !")
-            st.experimental_rerun()
+            st.rerun()
 
 # --- Création de la finale ---
 st.divider()
@@ -143,7 +144,32 @@ if not finale_exists and not demis.empty:
             updated = pd.concat([edited, finale], ignore_index=True)
             updated.to_csv(BRACKET_PATH, index=False)
             st.success("✅ Finale générée !")
-            st.experimental_rerun()
+            st.rerun()
+
+# --- Affichage bracket graphique ---
+st.divider()
+st.subheader("🎯 Bracket du tournoi")
+
+def afficher_bracket():
+    phases = ["Ronde", "Demi", "Finale"]
+    fig, ax = plt.subplots(figsize=(8, 6))
+    y_pos = {"Ronde": [4,3,2,1], "Demi": [2.5,1.5], "Finale": [2]}
+    x_pos = {"Ronde": 0, "Demi": 1, "Finale": 2}
+
+    for _, m in edited.iterrows():
+        phase = m["Phase"]
+        if phase not in phases: continue
+        x = x_pos[phase]
+        y = y_pos[phase].pop(0)
+        txt = f"{m['Équipe A']} {m['Score A']} - {m['Score B']} {m['Équipe B']}"
+        ax.text(x, y, txt, ha="center", va="center", fontsize=10, bbox=dict(facecolor='white', edgecolor='black'))
+    ax.set_xlim(-0.5, 2.5)
+    ax.set_ylim(0, 5)
+    ax.axis("off")
+    plt.tight_layout()
+    st.pyplot(fig)
+
+afficher_bracket()
 
 # --- Fin du tournoi ---
 st.divider()
@@ -181,4 +207,4 @@ if st.button("🗑️ Supprimer le tournoi"):
     if confirm == "Oui, supprimer":
         os.remove(BRACKET_PATH)
         st.success("Tournoi supprimé avec succès.")
-        st.experimental_rerun()
+        st.rerun()
