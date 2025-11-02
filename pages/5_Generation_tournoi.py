@@ -12,8 +12,13 @@ DATA_DIR = "data"
 BRACKET_FILE = os.path.join(DATA_DIR, "tournoi_bracket.csv")
 os.makedirs(DATA_DIR, exist_ok=True)
 
+# --- Caching pour accélérer ---
+@st.cache_data
+def load_players_cached():
+    return load_players()
+
 # --- Charger les joueurs présents ---
-players = load_players()
+players = load_players_cached()
 players_present = players[players["present"] == True].reset_index(drop=True)
 st.info(f"✅ {len(players_present)} joueurs présents sélectionnés")
 
@@ -113,11 +118,17 @@ if equipes:
         random.shuffle(combinaisons)
 
         horaire = []
+        dernieres = {e: -1 for e in noms_equipes}
+        match_index = 0
+
         while combinaisons:
             for eq in noms_equipes:
                 for match in combinaisons:
-                    if eq in match and all(eq not in m for m in horaire[-2:]):  # éviter 2 matchs consécutifs
+                    if eq in match and all(match_index - dernieres[e] > 1 for e in match):
                         horaire.append(match)
+                        for e in match:
+                            dernieres[e] = match_index
+                        match_index += 1
                         combinaisons.remove(match)
                         break
                 if not combinaisons:
