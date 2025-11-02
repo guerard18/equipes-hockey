@@ -12,16 +12,21 @@ DATA_DIR = "data"
 BRACKET_FILE = os.path.join(DATA_DIR, "tournoi_bracket.csv")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# --- Caching pour accélérer ---
-@st.cache_data
-def load_players_cached():
-    return load_players()
+# --- Charger les joueurs ---
+def charger_joueurs():
+    """Recharge toujours la version actuelle du fichier joueurs.csv"""
+    players = load_players()
+    return players[players["present"] == True].reset_index(drop=True)
 
-# --- Charger les joueurs présents ---
-players = load_players_cached()
-players_present = players[players["present"] == True].reset_index(drop=True)
+# Bouton pour recharger
+if st.button("🔄 Recharger les joueurs présents"):
+    st.session_state["players_present"] = charger_joueurs()
+    st.success("✅ Liste des joueurs mise à jour !")
+
+# Charger depuis la session ou directement
+players_present = st.session_state.get("players_present", charger_joueurs())
+
 st.info(f"✅ {len(players_present)} joueurs présents sélectionnés")
-
 if len(players_present) < 10:
     st.warning("⚠️ Peu de joueurs présents — la formation sera approximative.")
 
@@ -157,4 +162,6 @@ if os.path.exists(BRACKET_FILE):
             os.remove(BRACKET_FILE)
             if "tournoi_equipes" in st.session_state:
                 del st.session_state["tournoi_equipes"]
+            if "players_present" in st.session_state:
+                del st.session_state["players_present"]
             st.success("✅ Tournoi supprimé avec succès.")
