@@ -237,3 +237,4 @@ if st.button("🗑️ Supprimer le tournoi"):
         os.remove(BRACKET_PATH)
         st.success("Tournoi supprimé avec succès.")
         st.rerun()
+
