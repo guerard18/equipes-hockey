@@ -13,9 +13,25 @@ BRACKET_FILE = os.path.join(DATA_DIR, "tournoi_bracket.csv")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# --- Chargement des joueurs présents ---
+# --- Chargement des joueurs ---
 joueurs = load_players()
-joueurs = joueurs[joueurs["Présent"] == True]
+
+# Normaliser les noms de colonnes pour éviter les KeyError
+joueurs.columns = joueurs.columns.str.strip().str.lower()
+
+# Vérification du nom de colonne pour "présent"
+present_col = None
+for c in joueurs.columns:
+    if "present" in c:  # gère "present" ou "présent"
+        present_col = c
+        break
+
+if not present_col:
+    st.error("Impossible de trouver la colonne 'Présent' dans le fichier joueurs.csv.")
+    st.stop()
+
+# Filtrer uniquement les joueurs présents
+joueurs = joueurs[joueurs[present_col] == True]
 
 if joueurs.empty:
     st.warning("Aucun joueur présent. Cochez d’abord les joueurs dans **Gestion des joueurs**.")
@@ -23,20 +39,33 @@ if joueurs.empty:
 
 st.write(f"**{len(joueurs)} joueurs présents.**")
 
-# --- Séparation attaquants / défenseurs pour équilibrer les équipes ---
-attaquants = joueurs[joueurs["Position"] == "Attaquant"].copy()
-defenseurs = joueurs[joueurs["Position"] == "Défenseur"].copy()
+# --- Séparation attaquants / défenseurs ---
+if "position" not in joueurs.columns:
+    st.error("Le fichier joueurs.csv doit contenir une colonne 'Position'.")
+    st.stop()
+
+attaquants = joueurs[joueurs["position"].str.lower().str.contains("attaquant", na=False)].copy()
+defenseurs = joueurs[joueurs["position"].str.lower().str.contains("defenseur", na=False)].copy()
+
+# --- Déterminer la colonne de talent ---
+talent_col = None
+for c in joueurs.columns:
+    if "talent" in c:
+        talent_col = c
+        break
+
+if not talent_col:
+    st.error("Aucune colonne 'Talent' trouvée.")
+    st.stop()
 
 # --- Création équilibrée de 4 équipes ---
 def creer_equipes_equilibrees():
     nb_equipes = 4
     equipes = {f"Équipe {i+1}": [] for i in range(nb_equipes)}
 
-    # Mélange pour aléatoire
-    attaquants_sorted = attaquants.sample(frac=1).sort_values("Talent", ascending=False).reset_index(drop=True)
-    defenseurs_sorted = defenseurs.sample(frac=1).sort_values("Talent", ascending=False).reset_index(drop=True)
+    attaquants_sorted = attaquants.sample(frac=1).sort_values(talent_col, ascending=False).reset_index(drop=True)
+    defenseurs_sorted = defenseurs.sample(frac=1).sort_values(talent_col, ascending=False).reset_index(drop=True)
 
-    # Répartition en rond
     for i, row in attaquants_sorted.iterrows():
         equipes[f"Équipe {(i % nb_equipes) + 1}"].append(row)
     for i, row in defenseurs_sorted.iterrows():
@@ -58,8 +87,8 @@ if "equipes_tournoi" in st.session_state:
     for i, (nom, df) in enumerate(equipes_df.items()):
         with cols[i]:
             st.markdown(f"### 🏒 {nom}")
-            st.dataframe(df[["Nom", "Position", "Talent"]], hide_index=True)
-            moyenne = df["Talent"].mean()
+            st.dataframe(df[[c for c in df.columns if c in ['nom','position',talent_col]]], hide_index=True)
+            moyenne = df[talent_col].mean()
             st.write(f"**Moyenne de talent :** {moyenne:.2f}")
 
 # --- Génération du tournoi ---
@@ -68,12 +97,11 @@ def generer_matchs_equilibres(equipes):
     combinaisons = list(itertools.combinations(noms_equipes, 2))
     random.shuffle(combinaisons)
 
-    # Construction d’un horaire pour éviter matchs consécutifs
     horaire = []
     while combinaisons:
         for eq in noms_equipes:
             for match in combinaisons:
-                if eq in match and all(eq not in m for m in horaire[-2:]):  # évite 2 matchs de suite
+                if eq in match and all(eq not in m for m in horaire[-2:]):  # évite 2 matchs consécutifs
                     horaire.append(match)
                     combinaisons.remove(match)
                     break
@@ -95,7 +123,7 @@ if "equipes_tournoi" in st.session_state:
         st.success("✅ Tournoi créé avec succès ! Rendez-vous dans **Tournoi en cours** pour suivre les matchs.")
         st.balloons()
 
-# --- Suppression sécurisée du tournoi en cours ---
+# --- Suppression sécurisée ---
 st.divider()
 st.subheader("🧹 Réinitialiser le tournoi")
 if os.path.exists(BRACKET_FILE):
