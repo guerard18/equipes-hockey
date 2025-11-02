@@ -1,128 +1,139 @@
 import streamlit as st
 import pandas as pd
 import os
-import itertools
 import random
-from utils import load_players  # ta fonction existante pour charger les joueurs
+import itertools
+from datetime import datetime
+from utils import load_players
 
-st.title("🏒 Génération du tournoi")
+st.title("🏒 Génération du tournoi (4 équipes)")
 
 DATA_DIR = "data"
-PLAYER_FILE = os.path.join(DATA_DIR, "joueurs.csv")
 BRACKET_FILE = os.path.join(DATA_DIR, "tournoi_bracket.csv")
-
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# --- Chargement des joueurs ---
-joueurs = load_players()
+# --- Charger les joueurs présents ---
+players = load_players()
+players_present = players[players["present"] == True].reset_index(drop=True)
+st.info(f"✅ {len(players_present)} joueurs présents sélectionnés")
 
-# Normaliser les noms de colonnes pour éviter les KeyError
-joueurs.columns = joueurs.columns.str.strip().str.lower()
+if len(players_present) < 10:
+    st.warning("⚠️ Peu de joueurs présents — la formation sera approximative.")
 
-# Vérification du nom de colonne pour "présent"
-present_col = None
-for c in joueurs.columns:
-    if "present" in c:  # gère "present" ou "présent"
-        present_col = c
-        break
+# --- Fonction utilitaire ---
+def snake_draft(df, nb_groupes, colonne):
+    """Distribution équilibrée des joueurs selon le talent."""
+    if df.empty:
+        return [pd.DataFrame() for _ in range(nb_groupes)]
+    df = df.sample(frac=1).sort_values(colonne, ascending=False).reset_index(drop=True)
+    groupes = [[] for _ in range(nb_groupes)]
+    sens = 1
+    idx = 0
+    for _, joueur in df.iterrows():
+        groupes[idx].append(joueur)
+        idx += sens
+        if idx == nb_groupes:
+            sens = -1
+            idx = nb_groupes - 1
+        elif idx < 0:
+            sens = 1
+            idx = 0
+    return [pd.DataFrame(g) for g in groupes]
 
-if not present_col:
-    st.error("Impossible de trouver la colonne 'Présent' dans le fichier joueurs.csv.")
-    st.stop()
+# --- Génération automatique des 4 équipes ---
+def generer_equipes_tournoi(players_present):
+    players_present = players_present.copy()
+    players_present["poste"] = players_present.apply(
+        lambda x: "Attaquant" if x["talent_attaque"] >= x["talent_defense"] else "Défenseur",
+        axis=1
+    )
 
-# Filtrer uniquement les joueurs présents
-joueurs = joueurs[joueurs[present_col] == True]
+    attaquants = players_present[players_present["poste"] == "Attaquant"].copy()
+    defenseurs = players_present[players_present["poste"] == "Défenseur"].copy()
 
-if joueurs.empty:
-    st.warning("Aucun joueur présent. Cochez d’abord les joueurs dans **Gestion des joueurs**.")
-    st.stop()
+    # Équilibrage des rôles
+    if len(defenseurs) < 8:
+        supl = attaquants.nlargest(8 - len(defenseurs), "talent_defense")
+        defenseurs = pd.concat([defenseurs, supl])
+        attaquants = attaquants.drop(supl.index)
 
-st.write(f"**{len(joueurs)} joueurs présents.**")
+    if len(attaquants) < 12:
+        supl = defenseurs.nlargest(12 - len(attaquants), "talent_attaque")
+        attaquants = pd.concat([attaquants, supl])
+        defenseurs = defenseurs.drop(supl.index)
 
-# --- Si pas de colonne position, on en crée une ---
-if "position" not in joueurs.columns:
-    st.warning("⚠️ Aucune colonne 'Position' trouvée — tous les joueurs seront considérés comme attaquants.")
-    joueurs["position"] = "Attaquant"
+    # Formation des trios et duos
+    trios = snake_draft(attaquants, 8, "talent_attaque")  # 8 trios pour 4 équipes
+    duos = snake_draft(defenseurs, 8, "talent_defense")   # 8 duos pour 4 équipes
 
-# --- Trouver la colonne de talent ---
-talent_col = None
-for c in joueurs.columns:
-    if "talent" in c:
-        talent_col = c
-        break
+    random.shuffle(trios)
+    random.shuffle(duos)
 
-if not talent_col:
-    st.error("Aucune colonne contenant 'talent' n’a été trouvée.")
-    st.stop()
+    # Attribution : 2 trios et 2 duos par équipe
+    equipes = {
+        "BLANCS ⚪": {"trios": trios[0:2], "duos": duos[0:2]},
+        "NOIRS ⚫": {"trios": trios[2:4], "duos": duos[2:4]},
+        "ROUGES 🔴": {"trios": trios[4:6], "duos": duos[4:6]},
+        "VERTS 🟢": {"trios": trios[6:8], "duos": duos[6:8]},
+    }
 
-# --- Séparation attaquants / défenseurs ---
-attaquants = joueurs[joueurs["position"].str.lower().str.contains("attaquant", na=False)].copy()
-defenseurs = joueurs[joueurs["position"].str.lower().str.contains("defenseur", na=False)].copy()
+    # Calcul des moyennes
+    for nom, eq in equipes.items():
+        moy_trios = [t["talent_attaque"].mean() for t in eq["trios"] if not t.empty]
+        moy_duos = [d["talent_defense"].mean() for d in eq["duos"] if not d.empty]
+        eq["moyenne"] = round((sum(moy_trios + moy_duos) / len(moy_trios + moy_duos)), 2)
 
-# --- Création équilibrée de 4 équipes ---
-def creer_equipes_equilibrees():
-    nb_equipes = 4
-    equipes = {f"Équipe {i+1}": [] for i in range(nb_equipes)}
+    return equipes
 
-    attaquants_sorted = attaquants.sample(frac=1).sort_values(talent_col, ascending=False).reset_index(drop=True)
-    defenseurs_sorted = defenseurs.sample(frac=1).sort_values(talent_col, ascending=False).reset_index(drop=True)
+# --- Affichage et génération ---
+if st.button("🎯 Générer les équipes du tournoi"):
+    st.session_state["tournoi_equipes"] = generer_equipes_tournoi(players_present)
+    st.success("✅ Équipes du tournoi générées !")
 
-    # Répartition équilibrée
-    for i, row in attaquants_sorted.iterrows():
-        equipes[f"Équipe {(i % nb_equipes) + 1}"].append(row)
-    for i, row in defenseurs_sorted.iterrows():
-        equipes[f"Équipe {(i % nb_equipes) + 1}"].append(row)
+equipes = st.session_state.get("tournoi_equipes")
 
-    equipes_df = {team: pd.DataFrame(data) for team, data in equipes.items()}
-    return equipes_df
+if equipes:
+    st.subheader("📋 Composition des équipes du tournoi")
+    for nom, eq in equipes.items():
+        st.markdown(f"## {nom} — Moyenne : **{eq['moyenne']}**")
+        for i, trio in enumerate(eq["trios"], 1):
+            if not trio.empty:
+                moy = round(trio["talent_attaque"].mean(), 2)
+                st.write(f"**Trio {i} ({moy}) :** {', '.join(trio['nom'])}")
+        for i, duo in enumerate(eq["duos"], 1):
+            if not duo.empty:
+                moy = round(duo["talent_defense"].mean(), 2)
+                st.write(f"**Duo {i} ({moy}) :** {', '.join(duo['nom'])}")
+        st.divider()
 
-if st.button("🎲 Générer les équipes du tournoi"):
-    equipes_df = creer_equipes_equilibrees()
-    st.session_state["equipes_tournoi"] = equipes_df
-    st.success("✅ Équipes générées !")
+    # --- Création des matchs ---
+    def generer_matchs_equilibres(equipes):
+        noms_equipes = list(equipes.keys())
+        combinaisons = list(itertools.combinations(noms_equipes, 2))
+        random.shuffle(combinaisons)
 
-# --- Affichage des équipes générées ---
-if "equipes_tournoi" in st.session_state:
-    equipes_df = st.session_state["equipes_tournoi"]
-    st.subheader("📋 Équipes du tournoi")
-    cols = st.columns(4)
-    for i, (nom, df) in enumerate(equipes_df.items()):
-        with cols[i]:
-            st.markdown(f"### 🏒 {nom}")
-            st.dataframe(df[[c for c in df.columns if c in ['nom','position',talent_col]]], hide_index=True)
-            moyenne = df[talent_col].mean()
-            st.write(f"**Moyenne de talent :** {moyenne:.2f}")
-
-# --- Génération du tournoi ---
-def generer_matchs_equilibres(equipes):
-    noms_equipes = list(equipes.keys())
-    combinaisons = list(itertools.combinations(noms_equipes, 2))
-    random.shuffle(combinaisons)
-
-    horaire = []
-    while combinaisons:
-        for eq in noms_equipes:
-            for match in combinaisons:
-                if eq in match and all(eq not in m for m in horaire[-2:]):  # évite 2 matchs consécutifs
-                    horaire.append(match)
-                    combinaisons.remove(match)
+        horaire = []
+        while combinaisons:
+            for eq in noms_equipes:
+                for match in combinaisons:
+                    if eq in match and all(eq not in m for m in horaire[-2:]):  # éviter 2 matchs consécutifs
+                        horaire.append(match)
+                        combinaisons.remove(match)
+                        break
+                if not combinaisons:
                     break
-            if not combinaisons:
-                break
 
-    matchs = pd.DataFrame(horaire, columns=["Équipe A", "Équipe B"])
-    matchs["Score A"] = 0
-    matchs["Score B"] = 0
-    matchs["Terminé"] = False
-    matchs["Phase"] = "Ronde"
-    return matchs
+        matchs = pd.DataFrame(horaire, columns=["Équipe A", "Équipe B"])
+        matchs["Score A"] = 0
+        matchs["Score B"] = 0
+        matchs["Terminé"] = False
+        matchs["Phase"] = "Ronde"]
+        return matchs
 
-if "equipes_tournoi" in st.session_state:
     if st.button("🏁 Créer le tournoi"):
-        equipes_df = st.session_state["equipes_tournoi"]
-        matchs = generer_matchs_equilibres(equipes_df)
+        matchs = generer_matchs_equilibres(equipes)
         matchs.to_csv(BRACKET_FILE, index=False)
-        st.success("✅ Tournoi créé avec succès ! Rendez-vous dans **Tournoi en cours** pour suivre les matchs.")
+        st.success("✅ Tournoi créé avec succès ! Consulte **Tournoi en cours** pour suivre les matchs.")
         st.balloons()
 
 # --- Suppression sécurisée ---
@@ -133,6 +144,6 @@ if os.path.exists(BRACKET_FILE):
         confirm = st.radio("Souhaitez-vous vraiment supprimer le tournoi ?", ["Non", "Oui, supprimer"], horizontal=True)
         if confirm == "Oui, supprimer":
             os.remove(BRACKET_FILE)
-            st.success("Tournoi supprimé avec succès.")
-            if "equipes_tournoi" in st.session_state:
-                del st.session_state["equipes_tournoi"]
+            if "tournoi_equipes" in st.session_state:
+                del st.session_state["tournoi_equipes"]
+            st.success("✅ Tournoi supprimé avec succès.")
