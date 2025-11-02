@@ -1,120 +1,88 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import datetime
 
 st.title("📜 Historique des matchs")
 
 path = "data/historique.csv"
 
-def saison_from_date(date_str):
-    """Retourne la saison (ex: 2024-2025) selon le calendrier hockey (août à avril)."""
-    try:
-        date = datetime.strptime(date_str, "%Y-%m-%d")
-        annee = date.year
-        mois = date.month
-        # Saison de hockey : août (8) à avril (4)
-        if mois >= 8:  # août à décembre → saison de l'année courante à +1
-            return f"{annee}-{annee + 1}"
-        elif mois <= 4:  # janvier à avril → saison de l'année précédente à courante
-            return f"{annee - 1}-{annee}"
-        else:
-            return "Hors saison"
-    except Exception:
-        return "Inconnue"
-
 if not os.path.exists(path):
-    st.warning("Aucun historique trouvé pour le moment.")
+    st.warning("Aucun match enregistré pour le moment.")
+    st.stop()
+
+# Charger l’historique
+hist = pd.read_csv(path)
+
+# --- Filtre de saison ---
+if "Saison" in hist.columns:
+    saisons = sorted(hist["Saison"].dropna().unique(), reverse=True)
+    choix_saison = st.selectbox("🏒 Choisir la saison :", ["Toutes"] + saisons)
+    if choix_saison != "Toutes":
+        hist = hist[hist["Saison"] == choix_saison]
+        st.info(f"📅 Saison sélectionnée : **{choix_saison}** — {len(hist)} matchs trouvés.")
 else:
-    df = pd.read_csv(path)
+    choix_saison = "Toutes"
 
-    if df.empty:
-        st.info("L’historique est vide pour le moment.")
+if hist.empty:
+    st.warning("Aucun match trouvé pour cette saison.")
+    st.stop()
+
+# --- Affichage résumé ---
+st.subheader("📅 Liste des matchs enregistrés")
+st.dataframe(
+    hist[["Date", "Saison", "Moyenne_BLANCS", "Moyenne_NOIRS", "Équipe_BLANCS", "Équipe_NOIRS"]],
+    use_container_width=True
+)
+
+# --- Détails d’un match ---
+st.divider()
+st.subheader("🔍 Détails d’un match")
+
+match_list = hist["Date"].astype(str).tolist()
+selection = st.selectbox("Choisir une date de match :", [""] + match_list)
+
+if selection:
+    match = hist[hist["Date"].astype(str) == selection].iloc[0]
+    st.markdown(f"### 🏒 Match du **{match['Date']}** ({match['Saison']})")
+    st.write(f"⚪ **BLANCS (moyenne {match['Moyenne_BLANCS']})**")
+    st.write(match["Équipe_BLANCS"])
+    st.write(f"⚫ **NOIRS (moyenne {match['Moyenne_NOIRS']})**")
+    st.write(match["Équipe_NOIRS"])
+
+# --- Suppression sécurisée ---
+st.divider()
+st.subheader("🗑️ Gestion de l’historique")
+
+st.markdown("### ⚠️ Supprimer des données")
+
+choix_action = st.radio(
+    "Que voulez-vous effacer ?",
+    ["Rien", "Seulement la saison sélectionnée", "Tout l’historique"],
+    horizontal=False,
+)
+
+if choix_action != "Rien":
+    confirmation = st.radio(
+        f"Êtes-vous certain de vouloir {choix_action.lower()} ?",
+        ["Non", "Oui, supprimer définitivement"],
+        horizontal=True,
+    )
+
+    if confirmation == "Oui, supprimer définitivement":
+        try:
+            if choix_action == "Tout l’historique":
+                os.remove(path)
+                st.success("✅ Historique complet supprimé avec succès.")
+                st.stop()
+            elif choix_action == "Seulement la saison sélectionnée" and choix_saison != "Toutes":
+                hist = pd.read_csv(path)
+                hist = hist[hist["Saison"] != choix_saison]
+                hist.to_csv(path, index=False)
+                st.success(f"✅ Saison **{choix_saison}** supprimée avec succès.")
+                st.stop()
+            else:
+                st.warning("⚠️ Aucune saison sélectionnée à supprimer.")
+        except Exception as e:
+            st.error(f"Erreur lors de la suppression : {e}")
     else:
-        # Ajouter la colonne Saison si elle n’existe pas
-        if "Saison" not in df.columns:
-            df["Saison"] = df["Date"].apply(saison_from_date)
-            df.to_csv(path, index=False)
-
-        colonnes = [
-            "Date", "Saison", "Moyenne_BLANCS", "Moyenne_NOIRS",
-            "Trios_BLANCS", "Duos_BLANCS", "Trios_NOIRS", "Duos_NOIRS",
-            "Équipe_BLANCS", "Équipe_NOIRS"
-        ]
-        df = df[[c for c in colonnes if c in df.columns]].sort_values("Date", ascending=False)
-
-        # --- Filtrer par saison ---
-        st.subheader("📅 Sélection de la saison")
-        saisons = sorted(df["Saison"].dropna().unique(), reverse=True)
-        saison_select = st.selectbox("Choisir une saison :", saisons)
-        df_saison = df[df["Saison"] == saison_select]
-
-        if df_saison.empty:
-            st.warning("Aucun match enregistré pour cette saison.")
-        else:
-            # --- Sélecteur de match ---
-            st.subheader("🏒 Choisir une date de match")
-            dates = df_saison["Date"].dropna().unique().tolist()
-            date_select = st.selectbox("Match du :", dates)
-            match = df_saison[df_saison["Date"] == date_select].iloc[0]
-
-            # --- Affichage du match sélectionné ---
-            st.markdown(f"### 🏒 Match du {match['Date']} — Saison {saison_select}")
-            st.write(f"**Moyenne BLANCS ⚪ :** {match['Moyenne_BLANCS']}")
-            st.write(f"**Moyenne NOIRS ⚫ :** {match['Moyenne_NOIRS']}")
-
-            st.divider()
-            col1, col2 = st.columns(2)
-
-            # ----- ÉQUIPE BLANCS -----
-            with col1:
-                st.markdown("### ⚪ BLANCS")
-                st.markdown("**Trios :**")
-                st.markdown(match.get("Trios_BLANCS", "Aucun trio enregistré"))
-                st.markdown("**Duos :**")
-                st.markdown(match.get("Duos_BLANCS", "Aucun duo enregistré"))
-                st.markdown("**Joueurs :**")
-                for j in match["Équipe_BLANCS"].split(", "):
-                    st.write(f"- {j}")
-
-            # ----- ÉQUIPE NOIRS -----
-            with col2:
-                st.markdown("### ⚫ NOIRS")
-                st.markdown("**Trios :**")
-                st.markdown(match.get("Trios_NOIRS", "Aucun trio enregistré"))
-                st.markdown("**Duos :**")
-                st.markdown(match.get("Duos_NOIRS", "Aucun duo enregistré"))
-                st.markdown("**Joueurs :**")
-                for j in match["Équipe_NOIRS"].split(", "):
-                    st.write(f"- {j}")
-
-            st.divider()
-            st.download_button(
-                label="⬇️ Télécharger ce match (CSV)",
-                data=df_saison[df_saison["Date"] == date_select].to_csv(index=False).encode("utf-8"),
-                file_name=f"match_{date_select}.csv",
-                mime="text/csv"
-            )
-
-            # --- Tableau résumé pour la saison ---
-            st.subheader(f"📘 Historique de la saison {saison_select}")
-            st.dataframe(
-                df_saison[["Date", "Moyenne_BLANCS", "Moyenne_NOIRS"]],
-                use_container_width=True,
-                hide_index=True
-            )
-
-            # --- Export saison complète ---
-            st.download_button(
-                label=f"📦 Exporter toute la saison {saison_select} (CSV)",
-                data=df_saison.to_csv(index=False).encode("utf-8"),
-                file_name=f"saison_{saison_select}.csv",
-                mime="text/csv"
-            )
-
-        # --- Bouton de suppression complète ---
-        st.divider()
-        if st.button("🧹 Effacer tout l’historique"):
-            os.remove(path)
-            st.success("✅ Historique effacé avec succès.")
-            st.rerun()
+        st.info("Aucune suppression effectuée.")
