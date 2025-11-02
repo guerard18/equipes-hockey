@@ -63,7 +63,7 @@ def generer_equipes_tournoi(players_present):
     if len(attaquants) < 24:
         supl = defenseurs.nlargest(24 - len(attaquants), "talent_attaque")
         attaquants = pd.concat([attaquants, supl])
-        defenseurs = defenseurs.drop(supl.index)
+        defenseurs = defenseeurs.drop(supl.index)
 
     if len(defenseurs) < 16:
         supl = attaquants.nlargest(16 - len(defenseurs), "talent_defense")
@@ -115,6 +115,7 @@ if equipes:
     start_time = st.time_input("Heure de début du premier match", time(18, 0))
     match_duration = st.number_input("Durée d’un match (minutes)", 10, 120, 25, 5)
     pause = st.number_input("Pause entre les matchs (minutes)", 0, 60, 5, 5)
+    zamboni_pause = st.number_input("Durée de la pause Zamboni (minutes)", 5, 30, 10, 5)
 
     # --- Création optimisée des matchs ---
     def generer_matchs_equilibres(equipes):
@@ -152,16 +153,40 @@ if equipes:
         matchs = pd.DataFrame(horaire, columns=["Équipe A", "Équipe B"])
         matchs["Phase"] = "Ronde"
 
-        # Ajout des horaires
+        # Ajout des horaires avec pause Zamboni
         heure = datetime.combine(datetime.today(), start_time)
-        horaires = []
-        for _ in range(len(matchs)):
+        horaires, evenements = [], []
+        for i in range(len(matchs)):
             horaires.append(heure.strftime("%H:%M"))
+            evenements.append("Match")
             heure += timedelta(minutes=match_duration + pause)
-        matchs["Heure"] = horaires
-        matchs["Durée (min)"] = match_duration
+            if (i + 1) % 3 == 0 and i + 1 < len(matchs):
+                horaires.append(heure.strftime("%H:%M"))
+                evenements.append("🧊 Pause Zamboni")
+                heure += timedelta(minutes=zamboni_pause)
 
-        return matchs
+        # Synchroniser
+        df_final = []
+        idx_match = 0
+        for ev, h in zip(evenements, horaires):
+            if ev == "Match":
+                row = matchs.iloc[idx_match].copy()
+                row["Heure"] = h
+                row["Durée (min)"] = match_duration
+                row["Type"] = "Match"
+                df_final.append(row)
+                idx_match += 1
+            else:
+                df_final.append(pd.Series({
+                    "Heure": h,
+                    "Équipe A": "🧊 Pause Zamboni",
+                    "Équipe B": "",
+                    "Durée (min)": zamboni_pause,
+                    "Phase": "",
+                    "Type": "Pause"
+                }))
+
+        return pd.DataFrame(df_final)
 
     if st.button("🏁 Créer le tournoi"):
         with st.spinner("⏳ Génération du tournoi..."):
@@ -173,8 +198,8 @@ if equipes:
 
         st.markdown("### 🕓 Horaire du tournoi")
         df_affiche = matchs.copy()
-        df_affiche.index = [f"Match {i+1}" for i in range(len(df_affiche))]
-        st.dataframe(df_affiche[["Heure", "Équipe A", "Équipe B", "Durée (min)", "Phase"]])
+        df_affiche.index = [f"Événement {i+1}" for i in range(len(df_affiche))]
+        st.dataframe(df_affiche[["Heure", "Équipe A", "Équipe B", "Durée (min)", "Phase", "Type"]])
 
         # --- PDF export ---
         st.subheader("📄 Télécharger le PDF de l’horaire")
@@ -189,7 +214,10 @@ if equipes:
             pdf.drawString(50, y, "🕓 Horaire du tournoi :")
             y -= 20
             for i, row in matchs.iterrows():
-                pdf.drawString(60, y, f"Match {i+1} — {row['Heure']} ({row['Durée (min)']} min): {row['Équipe A']} vs {row['Équipe B']}")
+                if row["Type"] == "Pause":
+                    pdf.drawString(60, y, f"{row['Heure']} — 🧊 Pause Zamboni ({row['Durée (min)']} min)")
+                else:
+                    pdf.drawString(60, y, f"{row['Heure']} ({row['Durée (min)']} min): {row['Équipe A']} vs {row['Équipe B']}")
                 y -= 15
 
             pdf.save()
