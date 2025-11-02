@@ -174,40 +174,61 @@ if "update_finale" in st.session_state and st.session_state["update_finale"]:
         st.success("✅ Finale mise à jour avec les gagnants des demi-finales !")
         st.session_state["update_finale"] = False
 
-# --- Nouveau Bracket (style minimaliste comme l’image) ---
+# --- Bracket (style lignes classique avec noms et durées) ---
 st.divider()
 st.subheader("🎯 Bracket du tournoi")
 
-def draw_simple_bracket():
-    fig, ax = plt.subplots(figsize=(6, 4))
+def afficher_bracket():
+    fig, ax = plt.subplots(figsize=(9, 6))
     ax.axis("off")
 
-    # Lignes de la demi-finale gauche
+    demi = matchs[matchs["Phase"] == "Demi-finale"]
+    finale = matchs[matchs["Phase"] == "Finale"]
+
+    # Lignes du bracket
     ax.plot([0.1, 0.3], [0.8, 0.8], color='black', lw=2)
-    ax.plot([0.1, 0.3], [0.6, 0.6], color='black', lw=2)
-    ax.plot([0.3, 0.4], [0.8, 0.7], color='black', lw=2)
-    ax.plot([0.3, 0.4], [0.6, 0.7], color='black', lw=2)
-
-    # Lignes vers la finale
-    ax.plot([0.4, 0.6], [0.7, 0.7], color='black', lw=2)
-    ax.plot([0.6, 0.7], [0.7, 0.5], color='black', lw=2)
-
-    # Lignes des demi-finales inférieures
+    ax.plot([0.1, 0.3], [0.7, 0.7], color='black', lw=2)
+    ax.plot([0.3, 0.4], [0.8, 0.75], color='black', lw=2)
+    ax.plot([0.3, 0.4], [0.7, 0.75], color='black', lw=2)
     ax.plot([0.1, 0.3], [0.4, 0.4], color='black', lw=2)
-    ax.plot([0.1, 0.3], [0.2, 0.2], color='black', lw=2)
-    ax.plot([0.3, 0.4], [0.4, 0.3], color='black', lw=2)
-    ax.plot([0.3, 0.4], [0.2, 0.3], color='black', lw=2)
+    ax.plot([0.1, 0.3], [0.3, 0.3], color='black', lw=2)
+    ax.plot([0.3, 0.4], [0.4, 0.35], color='black', lw=2)
+    ax.plot([0.3, 0.4], [0.3, 0.35], color='black', lw=2)
+    ax.plot([0.4, 0.6], [0.75, 0.55], color='black', lw=2)
+    ax.plot([0.4, 0.6], [0.35, 0.55], color='black', lw=2)
+    ax.plot([0.6, 0.8], [0.55, 0.55], color='black', lw=2)
 
-    # Ligne de finale
-    ax.plot([0.4, 0.6], [0.3, 0.3], color='black', lw=2)
+    # Demi 1
+    if len(demi) >= 1:
+        m1 = demi.iloc[0]
+        ax.text(0.05, 0.805, f"{m1['Équipe A']} ({int(m1['Score A'])})", fontsize=11, va='center')
+        ax.text(0.05, 0.705, f"{m1['Équipe B']} ({int(m1['Score B'])})", fontsize=11, va='center')
+        ax.text(0.05, 0.675, f"{m1['Durée (min)']} min", fontsize=9, color="gray")
 
-    # Lien vers CHAMPION
-    ax.plot([0.6, 0.8], [0.5, 0.5], color='black', lw=2)
-    ax.text(0.81, 0.48, "CHAMPION", fontsize=10, fontweight="bold",
-            ha='left', va='center', bbox=dict(facecolor='lightgray', edgecolor='black'))
+    # Demi 2
+    if len(demi) >= 2:
+        m2 = demi.iloc[1]
+        ax.text(0.05, 0.405, f"{m2['Équipe A']} ({int(m2['Score A'])})", fontsize=11, va='center')
+        ax.text(0.05, 0.305, f"{m2['Équipe B']} ({int(m2['Score B'])})", fontsize=11, va='center')
+        ax.text(0.05, 0.275, f"{m2['Durée (min)']} min", fontsize=9, color="gray")
 
-    plt.xlim(0, 1)
-    plt.ylim(0, 1)
+    # Finale
+    if not finale.empty:
+        m3 = finale.iloc[0]
+        ax.text(0.5, 0.57, f"{m3['Équipe A']} ({int(m3['Score A'])})", fontsize=12, fontweight="bold", va='center')
+        ax.text(0.5, 0.52, f"{m3['Équipe B']} ({int(m3['Score B'])})", fontsize=12, fontweight="bold", va='center')
+        ax.text(0.5, 0.49, f"{m3['Durée (min)']} min", fontsize=9, color="gray")
+
+        # Champion
+        if m3["Gagnant"]:
+            ax.text(0.82, 0.55, f"🏆 {m3['Gagnant']}", fontsize=14, color="gold", fontweight="bold", va='center')
+        else:
+            ax.text(0.82, 0.55, "CHAMPION", fontsize=12, fontweight="bold",
+                    bbox=dict(facecolor="lightgray", edgecolor="black"), va='center')
+
+    ax.text(0.12, 0.88, "Demi-finales", fontsize=13, fontweight="bold")
+    ax.text(0.48, 0.65, "Finale", fontsize=13, fontweight="bold")
+
     st.pyplot(fig)
 
-draw_simple_bracket()
+afficher_bracket()
