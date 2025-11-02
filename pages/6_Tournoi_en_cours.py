@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import json
 from datetime import datetime
 
 st.set_page_config(page_title="Tournoi en cours", page_icon="🏒", layout="centered")
@@ -8,14 +9,15 @@ st.title("🏒 Tournoi en cours — Résultats, Classement & Bracket")
 
 DATA_DIR = "data"
 BRACKET_FILE = os.path.join(DATA_DIR, "tournoi_bracket.csv")
+INFO_FILE = os.path.join(DATA_DIR, "tournoi_info.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 COLS = [
     "Heure", "Équipe A", "Équipe B", "Durée (min)",
-    "Phase", "Type", "Score A", "Score B", "Terminé", "Prolongation"
+    "Phase", "Type", "Score A", "Score B", "Terminé", "Prolongation", "Date du tournoi"
 ]
 
-# ---------- Chargement ----------
+# ---------- Charger le fichier principal ----------
 def load_bracket():
     if os.path.exists(BRACKET_FILE):
         df = pd.read_csv(BRACKET_FILE)
@@ -24,12 +26,7 @@ def load_bracket():
 
     for c in COLS:
         if c not in df.columns:
-            if c in ["Score A", "Score B"]:
-                df[c] = 0
-            elif c in ["Terminé", "Prolongation"]:
-                df[c] = False
-            else:
-                df[c] = ""
+            df[c] = ""
 
     df["Score A"] = pd.to_numeric(df["Score A"], errors="coerce").fillna(0).astype(int)
     df["Score B"] = pd.to_numeric(df["Score B"], errors="coerce").fillna(0).astype(int)
@@ -40,7 +37,22 @@ def load_bracket():
 def save_bracket(df):
     df[COLS].to_csv(BRACKET_FILE, index=False)
 
-# ---------- Classement ----------
+# ---------- Charger la date du tournoi ----------
+def load_tournament_date():
+    if os.path.exists(INFO_FILE):
+        with open(INFO_FILE, "r") as f:
+            info = json.load(f)
+        try:
+            d = datetime.strptime(info["date_tournoi"], "%Y-%m-%d")
+            return d.strftime("%A %d %B %Y")
+        except:
+            return "Date non valide"
+    return "Date inconnue"
+
+date_tournoi = load_tournament_date()
+st.markdown(f"### 📅 Tournoi du **{date_tournoi.capitalize()}**")
+
+# ---------- Calcul du classement ----------
 def compute_standings(df: pd.DataFrame) -> pd.DataFrame:
     ronde = df[(df["Phase"] == "Ronde") & (df["Type"] == "Match") & (df["Terminé"] == True)]
     if ronde.empty:
@@ -81,7 +93,7 @@ def compute_standings(df: pd.DataFrame) -> pd.DataFrame:
     clas["Rang"] = clas.index + 1
     return clas[["Rang", "Équipe", "Pts", "BP", "BC", "Diff", "V", "DP", "D", "J"]]
 
-# ---------- Mise à jour demi/finale ----------
+# ---------- Mise à jour demi / finale ----------
 def update_semifinals_names(df, standings):
     if standings is None or standings.empty:
         return df
@@ -131,14 +143,14 @@ for idx, row in df.iterrows():
     if row["Phase"] == "Demi-finale" and idx > 0 and df.iloc[idx - 1]["Phase"] != "Demi-finale":
         colA, colB = st.columns([4, 2])
         with colA:
-            st.info("⚙️ Cliquez pour mettre à jour les équipes de demi-finale après la ronde.")
+            st.info("⚙️ Cliquez ici pour générer les **équipes de demi-finale** après la ronde complète.")
         with colB:
             if st.button("🔁 Mettre à jour les demi-finales maintenant"):
                 ronde = df[(df["Phase"] == "Ronde") & (df["Type"] == "Match")]
                 if not ronde.empty and ronde["Terminé"].all():
                     new_df = update_semifinals_names(df.copy(), standings)
                     save_bracket(new_df)
-                    st.success("✅ Demi-finales mises à jour.")
+                    st.success("✅ Demi-finales mises à jour !")
                     st.rerun()
                 else:
                     st.warning("⚠️ Tous les matchs de ronde ne sont pas terminés.")
@@ -147,12 +159,12 @@ for idx, row in df.iterrows():
     if row["Phase"] == "Finale" and idx > 0 and df.iloc[idx - 1]["Phase"] != "Finale":
         colA, colB = st.columns([4, 2])
         with colA:
-            st.info("🏆 Cliquez pour générer automatiquement la finale après les demi-finales.")
+            st.info("🏆 Cliquez ici pour générer la **finale** après les demi-finales.")
         with colB:
             if st.button("🔁 Mettre à jour la finale maintenant"):
                 new_df = update_final_names(df.copy())
                 save_bracket(new_df)
-                st.success("✅ Finale mise à jour avec les gagnants.")
+                st.success("✅ Finale mise à jour avec les gagnants !")
                 st.rerun()
 
     if row["Type"] == "Pause":
@@ -170,10 +182,7 @@ for idx, row in df.iterrows():
         st.write(row["Équipe B"])
         sb = st.number_input("", 0, 99, int(row["Score B"]), key=f"sb_{idx}")
     with col4:
-        if row["Phase"] == "Ronde":
-            ot = st.checkbox("Prolongation", value=row["Prolongation"], key=f"ot_{idx}")
-        else:
-            ot = False
+        ot = st.checkbox("Prolongation", value=row["Prolongation"], key=f"ot_{idx}") if row["Phase"] == "Ronde" else False
         done = st.checkbox("Terminé", value=row["Terminé"], key=f"tm_{idx}")
     with col5:
         if st.button("💾 Enregistrer", key=f"save_{idx}"):
@@ -182,14 +191,14 @@ for idx, row in df.iterrows():
             save_bracket(df)
             edited = True
 
-            # 🎉 Affiche confettis si la finale est terminée immédiatement
+            # 🎉 Afficher confettis si finale terminée
             if row["Phase"] == "Finale" and done:
                 champion_temp = row["Équipe A"] if sa > sb else row["Équipe B"]
 
 if edited:
     st.success("✅ Résultats enregistrés.")
 
-# ---------- Champion immédiat (sans rechargement) ----------
+# ---------- Champion ----------
 champ = champion_temp or champion_if_ready(df)
 if champ:
     st.markdown(
@@ -213,15 +222,12 @@ if champ:
         }}
         </style>
         <div class="champion">🏆 {champ} 🏆</div>
-
         <canvas id="confetti-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;"></canvas>
-
         <script>
         const canvas = document.getElementById('confetti-canvas');
         const ctx = canvas.getContext('2d');
         let confettis = [];
         const colors = ['#FFD700','#DAA520','#FFF8DC','#FFEC8B','#F0E68C'];
-
         function random(min,max) {{ return Math.random()*(max-min)+min; }}
         function createConfetti() {{
             for (let i=0; i<200; i++) {{
@@ -253,7 +259,6 @@ if champ:
             confettis.forEach(c => {{
                 c.tiltAngle += c.tiltAngleIncrement;
                 c.y += (Math.cos(c.d) + 2 + c.r / 2) / 2;
-                c.x += Math.sin(0.01);
                 if (c.y > canvas.height) {{
                     c.y = 0;
                     c.x = random(0, window.innerWidth);
