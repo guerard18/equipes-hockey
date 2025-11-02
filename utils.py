@@ -1,56 +1,65 @@
 import pandas as pd
 import os
+from datetime import datetime
 
+# --- Charger les joueurs ---
 def load_players():
     path = "data/joueurs.csv"
-    if not os.path.exists(path):
-        os.makedirs("data", exist_ok=True)
-        df = pd.DataFrame(columns=["nom", "talent_attaque", "talent_defense", "present"])
-        df.to_csv(path, index=False)
+    if os.path.exists(path):
+        return pd.read_csv(path)
     else:
-        df = pd.read_csv(path)
-        if "present" not in df.columns:
-            df["present"] = False
-    return df
+        return pd.DataFrame(columns=["nom", "talent_attaque", "talent_defense", "present"])
 
+# --- Sauvegarder les joueurs ---
 def save_players(df):
+    path = "data/joueurs.csv"
     os.makedirs("data", exist_ok=True)
-    df.to_csv("data/joueurs.csv", index=False)
+    df.to_csv(path, index=False)
 
-def save_history(equipeB, equipeN, moyB, moyN, date, triosB=None, duosB=None, triosN=None, duosN=None):
-    """Sauvegarde les équipes formées dans le fichier historique"""
+# --- Calcul automatique de la saison de hockey ---
+def saison_from_date(date_str):
+    """Retourne la saison (ex: 2024-2025) selon le calendrier hockey (août à avril)."""
+    try:
+        date = datetime.strptime(date_str, "%Y-%m-%d")
+        annee = date.year
+        mois = date.month
+        # Saison : août → avril
+        if mois >= 8:  # Août à décembre
+            return f"{annee}-{annee + 1}"
+        elif mois <= 4:  # Janvier à avril
+            return f"{annee - 1}-{annee}"
+        else:
+            return "Hors saison"
+    except Exception:
+        return "Inconnue"
+
+# --- Sauvegarder l’historique d’un match ---
+def save_history(date, moyB, moyN, triosB, duosB, triosN, duosN, eqB, eqN):
+    """Sauvegarde un match dans l'historique avec la saison calculée automatiquement."""
     path = "data/historique.csv"
     os.makedirs("data", exist_ok=True)
 
-    def lignes_to_str(lignes, col):
-        """Convertit trios/duos en texte avec moyenne"""
-        if not lignes:
-            return ""
-        resultats = []
-        for i, g in enumerate(lignes, 1):
-            if g.empty:
-                continue
-            moy = round(g[col].mean(), 2)
-            noms = ", ".join(g["nom"].tolist())
-            resultats.append(f"{i}: {noms} (moy {moy})")
-        return " | ".join(resultats)
+    # Calcul automatique de la saison
+    saison = saison_from_date(date)
 
-    new_entry = pd.DataFrame([{
+    new_data = pd.DataFrame([{
         "Date": date,
-        "Moyenne_BLANCS": moyB,
-        "Moyenne_NOIRS": moyN,
-        "Trios_BLANCS": lignes_to_str(triosB, "talent_attaque"),
-        "Duos_BLANCS": lignes_to_str(duosB, "talent_defense"),
-        "Trios_NOIRS": lignes_to_str(triosN, "talent_attaque"),
-        "Duos_NOIRS": lignes_to_str(duosN, "talent_defense"),
-        "Équipe_BLANCS": ", ".join(equipeB),
-        "Équipe_NOIRS": ", ".join(equipeN)
+        "Saison": saison,
+        "Moyenne_BLANCS": round(moyB, 2),
+        "Moyenne_NOIRS": round(moyN, 2),
+        "Trios_BLANCS": ", ".join([" / ".join(t) for t in triosB]),
+        "Duos_BLANCS": ", ".join([" / ".join(d) for d in duosB]),
+        "Trios_NOIRS": ", ".join([" / ".join(t) for t in triosN]),
+        "Duos_NOIRS": ", ".join([" / ".join(d) for d in duosN]),
+        "Équipe_BLANCS": ", ".join(eqB),
+        "Équipe_NOIRS": ", ".join(eqN)
     }])
 
+    # Ajouter à l’historique existant
     if os.path.exists(path):
-        df = pd.read_csv(path)
-        df = pd.concat([df, new_entry], ignore_index=True)
+        old = pd.read_csv(path)
+        df = pd.concat([old, new_data], ignore_index=True)
     else:
-        df = new_entry
+        df = new_data
 
     df.to_csv(path, index=False)
