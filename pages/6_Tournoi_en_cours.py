@@ -3,299 +3,176 @@ import pandas as pd
 import os
 import json
 from datetime import datetime
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+import matplotlib.font_manager as fm
+import locale
 
-st.set_page_config(page_title="Tournoi en cours", page_icon="🏒", layout="centered")
-st.title("🏒 Tournoi en cours — Résultats, Classement & Bracket")
+# Configuration de la locale pour la date en français
+try:
+    locale.setlocale(locale.LC_TIME, "fr_FR.UTF-8")
+except:
+    locale.setlocale(locale.LC_TIME, "fr_CA.UTF-8")
+
+st.title("🏒 Tournoi en cours")
 
 DATA_DIR = "data"
 BRACKET_FILE = os.path.join(DATA_DIR, "tournoi_bracket.csv")
 INFO_FILE = os.path.join(DATA_DIR, "tournoi_info.json")
-os.makedirs(DATA_DIR, exist_ok=True)
 
-COLS = [
-    "Heure", "Équipe A", "Équipe B", "Durée (min)",
-    "Phase", "Type", "Score A", "Score B", "Terminé", "Prolongation", "Date du tournoi"
-]
-
-# ---------- Charger le fichier principal ----------
-def load_bracket():
-    if os.path.exists(BRACKET_FILE):
-        df = pd.read_csv(BRACKET_FILE)
-    else:
-        df = pd.DataFrame(columns=COLS)
-
-    for c in COLS:
-        if c not in df.columns:
-            df[c] = ""
-
-    df["Score A"] = pd.to_numeric(df["Score A"], errors="coerce").fillna(0).astype(int)
-    df["Score B"] = pd.to_numeric(df["Score B"], errors="coerce").fillna(0).astype(int)
-    df["Terminé"] = df["Terminé"].astype(str).str.lower().isin(["true", "1", "yes"])
-    df["Prolongation"] = df["Prolongation"].astype(str).str.lower().isin(["true", "1", "yes"])
-    return df[COLS]
-
-def save_bracket(df):
-    df[COLS].to_csv(BRACKET_FILE, index=False)
-
-# ---------- Charger la date du tournoi (affichage toujours en français) ----------
-def load_tournament_date():
-    if not os.path.exists(INFO_FILE):
-        return "Date inconnue"
-
-    with open(INFO_FILE, "r") as f:
-        info = json.load(f)
-
-    try:
-        d = datetime.strptime(info["date_tournoi"], "%Y-%m-%d")
-    except:
-        return "Date non valide"
-
-    jours = [
-        "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"
-    ]
-    mois = [
-        "janvier", "février", "mars", "avril", "mai", "juin",
-        "juillet", "août", "septembre", "octobre", "novembre", "décembre"
-    ]
-
-    jour_nom = jours[d.weekday()]
-    mois_nom = mois[d.month - 1]
-
-    return f"{jour_nom.capitalize()} {d.day} {mois_nom} {d.year}"
-
-date_tournoi = load_tournament_date()
-st.markdown(f"### 📅 Tournoi du **{date_tournoi}**")
-
-# ---------- Calcul du classement ----------
-def compute_standings(df: pd.DataFrame) -> pd.DataFrame:
-    ronde = df[(df["Phase"] == "Ronde") & (df["Type"] == "Match") & (df["Terminé"] == True)]
-    if ronde.empty:
-        return pd.DataFrame()
-
-    teams = sorted(set(ronde["Équipe A"]) | set(ronde["Équipe B"]))
-    table = {t: {"Pts": 0, "BP": 0, "BC": 0, "V": 0, "D": 0, "DP": 0, "J": 0} for t in teams}
-
-    for _, r in ronde.iterrows():
-        A, B = r["Équipe A"], r["Équipe B"]
-        sa, sb, ot = int(r["Score A"]), int(r["Score B"]), bool(r["Prolongation"])
-        table[A]["J"] += 1; table[B]["J"] += 1
-        table[A]["BP"] += sa; table[A]["BC"] += sb
-        table[B]["BP"] += sb; table[B]["BC"] += sa
-
-        if sa > sb:
-            table[A]["V"] += 1
-            if ot:
-                table[B]["DP"] += 1; table[A]["Pts"] += 2; table[B]["Pts"] += 1
-            else:
-                table[B]["D"] += 1; table[A]["Pts"] += 2
-        elif sb > sa:
-            table[B]["V"] += 1
-            if ot:
-                table[A]["DP"] += 1; table[B]["Pts"] += 2; table[A]["Pts"] += 1
-            else:
-                table[A]["D"] += 1; table[B]["Pts"] += 2
-        else:
-            table[A]["Pts"] += 1; table[B]["Pts"] += 1
-
-    clas = (
-        pd.DataFrame.from_dict(table, orient="index")
-        .assign(Diff=lambda x: x["BP"] - x["BC"])
-        .reset_index().rename(columns={"index": "Équipe"})
-        .sort_values(by=["Pts", "Diff", "BP"], ascending=[False, False, False])
-        .reset_index(drop=True)
-    )
-    clas["Rang"] = clas.index + 1
-    return clas[["Rang", "Équipe", "Pts", "BP", "BC", "Diff", "V", "DP", "D", "J"]]
-
-# ---------- Mise à jour demi / finale ----------
-def update_semifinals_names(df, standings):
-    if standings is None or standings.empty:
-        return df
-    demi_idx = df[(df["Phase"] == "Demi-finale") & (df["Type"] == "Match")].index.tolist()
-    if len(demi_idx) < 2 or len(standings) < 4:
-        return df
-    t1, t2, t3, t4 = standings.iloc[0]["Équipe"], standings.iloc[1]["Équipe"], standings.iloc[2]["Équipe"], standings.iloc[3]["Équipe"]
-    df.at[demi_idx[0], "Équipe A"], df.at[demi_idx[0], "Équipe B"] = t1, t4
-    df.at[demi_idx[1], "Équipe A"], df.at[demi_idx[1], "Équipe B"] = t2, t3
-    return df
-
-def update_final_names(df):
-    demi = df[(df["Phase"] == "Demi-finale") & (df["Type"] == "Match")]
-    fin = df[(df["Phase"] == "Finale") & (df["Type"] == "Match")]
-    if demi.shape[0] < 2 or fin.shape[0] < 1 or not demi["Terminé"].all():
-        return df
-    winners = []
-    for _, r in demi.iterrows():
-        if int(r["Score A"]) > int(r["Score B"]): winners.append(r["Équipe A"])
-        elif int(r["Score B"]) > int(r["Score A"]): winners.append(r["Équipe B"])
-    if len(winners) == 2:
-        fin_idx = fin.index[0]
-        df.at[fin_idx, "Équipe A"], df.at[fin_idx, "Équipe B"] = winners[0], winners[1]
-    return df
-
-def champion_if_ready(df):
-    fin = df[(df["Phase"] == "Finale") & (df["Type"] == "Match")]
-    if fin.empty or not fin.iloc[0]["Terminé"]:
-        return ""
-    r = fin.iloc[0]
-    return r["Équipe A"] if r["Score A"] > r["Score B"] else r["Équipe B"]
-
-# ---------- Interface ----------
-df = load_bracket()
-if df.empty:
-    st.info("Aucun tournoi généré. Va dans **Génération du tournoi** pour le créer.")
+if not os.path.exists(BRACKET_FILE):
+    st.warning("⚠️ Aucun tournoi n’a encore été généré. Allez dans 'Génération du tournoi'.")
     st.stop()
 
-standings = compute_standings(df)
-edited = False
-champion_temp = ""
+# Charger les données du tournoi
+matchs = pd.read_csv(BRACKET_FILE)
+with open(INFO_FILE, "r") as f:
+    info = json.load(f)
 
-st.subheader("🗓️ Horaire & Résultats")
+date_tournoi = datetime.strptime(info["date"], "%Y-%m-%d").strftime("%A %d %B %Y")
+capitaines = info.get("capitaines", {})
 
-for idx, row in df.iterrows():
-    # Bouton avant la demi
-    if row["Phase"] == "Demi-finale" and idx > 0 and df.iloc[idx - 1]["Phase"] != "Demi-finale":
-        colA, colB = st.columns([4, 2])
-        with colA:
-            st.info("⚙️ Cliquez ici pour générer les **équipes de demi-finale** après la ronde complète.")
-        with colB:
-            if st.button("🔁 Mettre à jour les demi-finales maintenant"):
-                ronde = df[(df["Phase"] == "Ronde") & (df["Type"] == "Match")]
-                if not ronde.empty and ronde["Terminé"].all():
-                    new_df = update_semifinals_names(df.copy(), standings)
-                    save_bracket(new_df)
-                    st.success("✅ Demi-finales mises à jour !")
-                    st.rerun()
-                else:
-                    st.warning("⚠️ Tous les matchs de ronde ne sont pas terminés.")
+st.subheader(f"📅 Tournoi du {date_tournoi.capitalize()}")
 
-    # Bouton avant la finale
-    if row["Phase"] == "Finale" and idx > 0 and df.iloc[idx - 1]["Phase"] != "Finale":
-        colA, colB = st.columns([4, 2])
-        with colA:
-            st.info("🏆 Cliquez ici pour générer la **finale** après les demi-finales.")
-        with colB:
-            if st.button("🔁 Mettre à jour la finale maintenant"):
-                new_df = update_final_names(df.copy())
-                save_bracket(new_df)
-                st.success("✅ Finale mise à jour avec les gagnants !")
-                st.rerun()
+# Ajouter colonnes manquantes
+if "Score A" not in matchs.columns:
+    matchs["Score A"] = 0
+if "Score B" not in matchs.columns:
+    matchs["Score B"] = 0
+if "Gagnant" not in matchs.columns:
+    matchs["Gagnant"] = ""
+if "Prolongation" not in matchs.columns:
+    matchs["Prolongation"] = False
 
-    if row["Type"] == "Pause":
-        st.markdown(f"**{row['Heure']} — {row['Équipe A']}** ({int(row['Durée (min)'])} min)")
-        continue
-
-    col1, col2, col3, col4, col5 = st.columns([2, 3, 3, 2, 3])
-    with col1:
-        st.write(f"**{row['Heure']}**")
-        st.caption(f"{row['Phase']}")
-    with col2:
-        st.write(row["Équipe A"])
-        sa = st.number_input("", 0, 99, int(row["Score A"]), key=f"sa_{idx}")
-    with col3:
-        st.write(row["Équipe B"])
-        sb = st.number_input("", 0, 99, int(row["Score B"]), key=f"sb_{idx}")
-    with col4:
-        ot = st.checkbox("Prolongation", value=row["Prolongation"], key=f"ot_{idx}") if row["Phase"] == "Ronde" else False
-        done = st.checkbox("Terminé", value=row["Terminé"], key=f"tm_{idx}")
-    with col5:
-        if st.button("💾 Enregistrer", key=f"save_{idx}"):
-            df.at[idx, "Score A"], df.at[idx, "Score B"] = sa, sb
-            df.at[idx, "Prolongation"], df.at[idx, "Terminé"] = ot, done
-            save_bracket(df)
-            edited = True
-
-            # 🎉 Confettis si finale terminée
-            if row["Phase"] == "Finale" and done:
-                champion_temp = row["Équipe A"] if sa > sb else row["Équipe B"]
-
-if edited:
-    st.success("✅ Résultats enregistrés.")
-
-# ---------- Champion ----------
-champ = champion_temp or champion_if_ready(df)
-if champ:
-    st.markdown(
-        f"""
-        <style>
-        @keyframes goldShine {{
-            0% {{ background-position: 0% 50%; }}
-            100% {{ background-position: 100% 50%; }}
-        }}
-        .champion {{
-            text-align: center;
-            font-size: 70px;
-            font-weight: bold;
-            background: linear-gradient(90deg, #FFD700, #FFFACD, #FFD700);
-            background-size: 400% 400%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: goldShine 3s linear infinite;
-            text-shadow: 2px 2px 5px #B8860B;
-            margin-top: 40px;
-        }}
-        </style>
-        <div class="champion">🏆 {champ} 🏆</div>
-        <canvas id="confetti-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;"></canvas>
-        <script>
-        const canvas = document.getElementById('confetti-canvas');
-        const ctx = canvas.getContext('2d');
-        let confettis = [];
-        const colors = ['#FFD700','#DAA520','#FFF8DC','#FFEC8B','#F0E68C'];
-        function random(min,max) {{ return Math.random()*(max-min)+min; }}
-        function createConfetti() {{
-            for (let i=0; i<200; i++) {{
-                confettis.push({{
-                    x: random(0, window.innerWidth),
-                    y: random(-window.innerHeight, 0),
-                    r: random(2,6),
-                    d: random(1,3),
-                    color: colors[Math.floor(Math.random()*colors.length)],
-                    tilt: random(-10,10),
-                    tiltAngleIncrement: random(0.02,0.05),
-                    tiltAngle: 0
-                }});
-            }}
-        }}
-        function drawConfetti() {{
-            ctx.clearRect(0,0,canvas.width,canvas.height);
-            confettis.forEach(c => {{
-                ctx.beginPath();
-                ctx.lineWidth = c.r;
-                ctx.strokeStyle = c.color;
-                ctx.moveTo(c.x + c.tilt + c.r, c.y);
-                ctx.lineTo(c.x + c.tilt, c.y + c.tilt + c.r);
-                ctx.stroke();
-            }});
-            update();
-        }}
-        function update() {{
-            confettis.forEach(c => {{
-                c.tiltAngle += c.tiltAngleIncrement;
-                c.y += (Math.cos(c.d) + 2 + c.r / 2) / 2;
-                if (c.y > canvas.height) {{
-                    c.y = 0;
-                    c.x = random(0, window.innerWidth);
-                }}
-            }});
-        }}
-        function animateConfetti() {{
-            drawConfetti();
-            requestAnimationFrame(animateConfetti);
-        }}
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        createConfetti();
-        animateConfetti();
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
-
-# ---------- Réinitialisation ----------
+# --- Gestion des scores ---
 st.divider()
-st.subheader("🧹 Réinitialiser les scores")
-if st.button("♻️ Remettre les scores à zéro"):
-    df.loc[df["Type"]=="Match", ["Score A","Score B","Terminé","Prolongation"]] = [0,0,False,False]
-    save_bracket(df)
-    st.success("✅ Scores remis à zéro.")
+st.subheader("📝 Entrer les résultats des matchs")
+
+for i, row in matchs.iterrows():
+    if row["Type"] == "Match":
+        col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
+        with col1:
+            st.markdown(f"### {row['Équipe A']}")
+            st.caption(f"👑 {capitaines.get(row['Équipe A'], '')}")
+            score_a = st.number_input("", min_value=0, value=int(row["Score A"]), key=f"a{i}")
+        with col2:
+            st.markdown(f"### {row['Équipe B']}")
+            st.caption(f"👑 {capitaines.get(row['Équipe B'], '')}")
+            score_b = st.number_input("", min_value=0, value=int(row["Score B"]), key=f"b{i}")
+        with col3:
+            gagnant = row["Équipe A"] if score_a > score_b else row["Équipe B"] if score_b > score_a else ""
+            matchs.loc[i, ["Score A", "Score B", "Gagnant"]] = [score_a, score_b, gagnant]
+        with col4:
+            st.write("")
+
+st.divider()
+if st.button("💾 Enregistrer les résultats"):
+    matchs.to_csv(BRACKET_FILE, index=False)
+    st.success("✅ Résultats enregistrés avec succès !")
+
+# --- Classement après la ronde ---
+st.divider()
+st.subheader("📊 Classement provisoire")
+
+def classement_from_results(df):
+    scores = {}
+    for _, row in df.iterrows():
+        if row["Phase"] != "Ronde" or row["Gagnant"] == "":
+            continue
+        a, b = row["Équipe A"], row["Équipe B"]
+        score_a, score_b = row["Score A"], row["Score B"]
+        for team in [a, b]:
+            if team not in scores:
+                scores[team] = {"Pts": 0, "BP": 0, "BC": 0}
+        scores[a]["BP"] += score_a
+        scores[a]["BC"] += score_b
+        scores[b]["BP"] += score_b
+        scores[b]["BC"] += score_a
+        if score_a > score_b:
+            scores[a]["Pts"] += 2
+        elif score_b > score_a:
+            scores[b]["Pts"] += 2
+    clas = pd.DataFrame(scores).T
+    clas["Diff"] = clas["BP"] - clas["BC"]
+    clas = clas.sort_values(["Pts", "Diff", "BP"], ascending=False).reset_index()
+    clas.rename(columns={"index": "Équipe"}, inplace=True)
+    return clas
+
+classement = classement_from_results(matchs)
+st.dataframe(classement)
+
+# --- Demi-finales automatiques ---
+st.divider()
+st.subheader("⚔️ Demi-finales")
+if "1er vs 4e" in " ".join(matchs["Équipe A"].tolist()):
+    if st.button("⚙️ Mettre à jour les demi-finales maintenant"):
+        if len(classement) >= 4:
+            top4 = classement["Équipe"].tolist()[:4]
+            matchs.loc[matchs["Équipe A"].str.contains("1er vs 4e"), ["Équipe A", "Équipe B"]] = [top4[0], top4[3]]
+            matchs.loc[matchs["Équipe A"].str.contains("2e vs 3e"), ["Équipe A", "Équipe B"]] = [top4[1], top4[2]]
+            matchs.to_csv(BRACKET_FILE, index=False)
+            st.success("✅ Demi-finales mises à jour !")
+
+# --- Bracket ---
+st.divider()
+st.subheader("🎯 Bracket du tournoi")
+
+def afficher_bracket():
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.axis("off")
+
+    phases = ["Demi-finale", "Finale"]
+    x_pos = [0.1, 0.55]
+    y_start = [0.7, 0.45]
+    y_step = 0.3
+
+    for phase, x in zip(phases, x_pos):
+        matches = matchs[matchs["Phase"].str.contains(phase, na=False)]
+        for j, (_, m) in enumerate(matches.iterrows()):
+            y = y_start[0] - j * y_step
+            rect = Rectangle((x, y), 0.3, 0.1, linewidth=2, edgecolor="black", facecolor="white")
+            ax.add_patch(rect)
+            team_a = f"{m['Équipe A']} {'👑'+capitaines.get(m['Équipe A'],'') if m['Équipe A'] in capitaines else ''}"
+            team_b = f"{m['Équipe B']} {'👑'+capitaines.get(m['Équipe B'],'') if m['Équipe B'] in capitaines else ''}"
+            ax.text(x + 0.01, y + 0.065, team_a, fontsize=10, fontweight="bold")
+            ax.text(x + 0.01, y + 0.03, team_b, fontsize=10, fontweight="bold")
+            ax.text(x + 0.23, y + 0.04, f"{int(m['Score A'])}-{int(m['Score B'])}", fontsize=12, fontweight="bold")
+
+    finale = matchs[matchs["Phase"] == "Finale"]
+    if not finale.empty:
+        m = finale.iloc[0]
+        x, y = 0.55, 0.1
+        rect = Rectangle((x, y), 0.3, 0.1, linewidth=3, edgecolor="gold", facecolor="white")
+        ax.add_patch(rect)
+        team_a = f"{m['Équipe A']} {'👑'+capitaines.get(m['Équipe A'],'') if m['Équipe A'] in capitaines else ''}"
+        team_b = f"{m['Équipe B']} {'👑'+capitaines.get(m['Équipe B'],'') if m['Équipe B'] in capitaines else ''}"
+        ax.text(x + 0.01, y + 0.065, team_a, fontsize=11, fontweight="bold")
+        ax.text(x + 0.01, y + 0.03, team_b, fontsize=11, fontweight="bold")
+        ax.text(x + 0.24, y + 0.04, f"{int(m['Score A'])}-{int(m['Score B'])}", fontsize=12, color="gold", fontweight="bold")
+
+        # Afficher le champion
+        if m["Gagnant"]:
+            st.success(f"🏆 **Équipe championne : {m['Gagnant']}**")
+            st.markdown(
+                f"<h2 style='text-align:center; color:gold;'>✨ CHAMPION : {m['Gagnant']} ✨</h2>",
+                unsafe_allow_html=True,
+            )
+            st.snow()
+
+    plt.text(0.12, 0.83, "Demi-finales", fontsize=14, fontweight="bold")
+    plt.text(0.6, 0.25, "Finale", fontsize=14, fontweight="bold")
+    st.pyplot(fig)
+
+afficher_bracket()
+
+# --- Finale ---
+st.divider()
+st.subheader("🏆 Finale")
+if "Gagnants demi-finales" in " ".join(matchs["Équipe A"].tolist()):
+    if st.button("⚙️ Mettre à jour la finale maintenant"):
+        demi = matchs[matchs["Phase"] == "Demi-finale"]
+        gagnants = demi["Gagnant"].tolist()
+        if len(gagnants) == 2 and all(gagnants):
+            matchs.loc[matchs["Phase"] == "Finale", ["Équipe A", "Équipe B"]] = gagnants
+            matchs.to_csv(BRACKET_FILE, index=False)
+            st.success("✅ Finale mise à jour avec les gagnants des demi-finales !")
