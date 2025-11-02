@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import os
 import json
-import locale
 from datetime import datetime
 
 st.set_page_config(page_title="Tournoi en cours", page_icon="🏒", layout="centered")
@@ -38,24 +37,31 @@ def load_bracket():
 def save_bracket(df):
     df[COLS].to_csv(BRACKET_FILE, index=False)
 
-# ---------- Charger la date du tournoi (en français) ----------
+# ---------- Charger la date du tournoi (affichage toujours en français) ----------
 def load_tournament_date():
+    if not os.path.exists(INFO_FILE):
+        return "Date inconnue"
+
+    with open(INFO_FILE, "r") as f:
+        info = json.load(f)
+
     try:
-        locale.setlocale(locale.LC_TIME, 'fr_CA.UTF-8')
+        d = datetime.strptime(info["date_tournoi"], "%Y-%m-%d")
     except:
-        try:
-            locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
-        except:
-            locale.setlocale(locale.LC_TIME, '')
-    if os.path.exists(INFO_FILE):
-        with open(INFO_FILE, "r") as f:
-            info = json.load(f)
-        try:
-            d = datetime.strptime(info["date_tournoi"], "%Y-%m-%d")
-            return d.strftime("%A %d %B %Y").capitalize()
-        except:
-            return "Date non valide"
-    return "Date inconnue"
+        return "Date non valide"
+
+    jours = [
+        "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"
+    ]
+    mois = [
+        "janvier", "février", "mars", "avril", "mai", "juin",
+        "juillet", "août", "septembre", "octobre", "novembre", "décembre"
+    ]
+
+    jour_nom = jours[d.weekday()]
+    mois_nom = mois[d.month - 1]
+
+    return f"{jour_nom.capitalize()} {d.day} {mois_nom} {d.year}"
 
 date_tournoi = load_tournament_date()
 st.markdown(f"### 📅 Tournoi du **{date_tournoi}**")
