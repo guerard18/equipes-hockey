@@ -4,6 +4,9 @@ import os
 import json
 from datetime import datetime
 import matplotlib.pyplot as plt
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import inch
 
 st.title("🏒 Tournoi en cours")
 
@@ -52,14 +55,60 @@ for col in ["Score A", "Score B", "Gagnant", "Prolongation"]:
         else:
             matchs[col] = ""
 
-# --- Saisie des résultats ---
+# --- Fonction d'export PDF propre ---
+def export_pdf(matchs, date_tournoi):
+    filename = os.path.join(DATA_DIR, f"horaire_{date_tournoi.replace(' ', '_')}.pdf")
+    c = canvas.Canvas(filename, pagesize=letter)
+    width, height = letter
+
+    # Titre principal
+    c.setFont("Helvetica-Bold", 18)
+    c.drawCentredString(width / 2, height - inch, f"Horaire du tournoi - {date_tournoi.capitalize()}")
+
+    # Ligne décorative
+    c.setLineWidth(1)
+    c.line(inch, height - 1.1 * inch, width - inch, height - 1.1 * inch)
+
+    y = height - 1.5 * inch
+    c.setFont("Helvetica", 11)
+
+    for _, row in matchs.iterrows():
+        heure = "" if pd.isna(row["Heure"]) else str(row["Heure"]).strip()
+        phase = row["Phase"]
+
+        if row["Type"] == "Match":
+            ligne = f"{heure: <6} | {phase: <15} | {row['Équipe A']} vs {row['Équipe B']}  ({row['Durée (min)']} min)"
+        else:
+            texte_pause = str(row['Équipe A']).strip()
+            if texte_pause.lower() == "nan" or texte_pause == "":
+                texte_pause = "Pause"
+            ligne = f"{heure: <6} | {texte_pause} ({row['Durée (min)']} min)"
+
+        c.drawString(inch, y, ligne)
+        y -= 0.25 * inch
+
+        if y < inch:
+            c.showPage()
+            c.setFont("Helvetica", 11)
+            y = height - inch
+
+    c.save()
+    return filename
+
+# --- Bouton d’export ---
+st.divider()
+if st.button("📄 Exporter l’horaire en PDF"):
+    pdf_path = export_pdf(matchs, date_tournoi)
+    st.success("✅ Horaire exporté avec succès !")
+    with open(pdf_path, "rb") as f:
+        st.download_button("⬇️ Télécharger l’horaire", f, file_name=os.path.basename(pdf_path), mime="application/pdf")
+
+# --- Horaire et résultats ---
 st.divider()
 st.subheader("🕓 Horaire et résultats des matchs")
 
 for i, row in matchs.iterrows():
     heure = "" if pd.isna(row["Heure"]) else str(row["Heure"]).strip()
-
-    # Nom des phases
     if row["Phase"] == "Ronde":
         phase_label = "Ronde éliminatoire"
     elif row["Phase"] == "Demi-finale":
@@ -100,7 +149,7 @@ for i, row in matchs.iterrows():
         else:
             st.info(f"🧊 Pause ({row['Durée (min)']} minutes)")
 
-        # --- Bouton mise à jour demi ---
+        # Bouton mise à jour demi
         if "avant la finale" not in texte_pause and any(matchs["Phase"].str.contains("Demi-finale")):
             idx_demi = matchs[matchs["Phase"] == "Demi-finale"].index.min()
             if i == idx_demi - 1:
@@ -108,7 +157,7 @@ for i, row in matchs.iterrows():
                 if st.button("🔁 Mettre à jour maintenant", key="update_demi_button"):
                     st.session_state["update_demi"] = True
 
-        # --- Bouton mise à jour finale ---
+        # Bouton mise à jour finale
         if "avant la finale" in texte_pause and any(matchs["Phase"].str.contains("Finale")):
             st.markdown("### 🏆 **Mettre à jour la finale**")
             if st.button("🔁 Mettre à jour la finale maintenant", key="update_finale_button"):
@@ -173,62 +222,3 @@ if "update_finale" in st.session_state and st.session_state["update_finale"]:
         matchs.to_csv(BRACKET_FILE, index=False)
         st.success("✅ Finale mise à jour avec les gagnants des demi-finales !")
         st.session_state["update_finale"] = False
-
-# --- Bracket (style lignes classique avec noms et durées) ---
-st.divider()
-st.subheader("🎯 Bracket du tournoi")
-
-def afficher_bracket():
-    fig, ax = plt.subplots(figsize=(9, 6))
-    ax.axis("off")
-
-    demi = matchs[matchs["Phase"] == "Demi-finale"]
-    finale = matchs[matchs["Phase"] == "Finale"]
-
-    # Lignes du bracket
-    ax.plot([0.1, 0.3], [0.8, 0.8], color='black', lw=2)
-    ax.plot([0.1, 0.3], [0.7, 0.7], color='black', lw=2)
-    ax.plot([0.3, 0.4], [0.8, 0.75], color='black', lw=2)
-    ax.plot([0.3, 0.4], [0.7, 0.75], color='black', lw=2)
-    ax.plot([0.1, 0.3], [0.4, 0.4], color='black', lw=2)
-    ax.plot([0.1, 0.3], [0.3, 0.3], color='black', lw=2)
-    ax.plot([0.3, 0.4], [0.4, 0.35], color='black', lw=2)
-    ax.plot([0.3, 0.4], [0.3, 0.35], color='black', lw=2)
-    ax.plot([0.4, 0.6], [0.75, 0.55], color='black', lw=2)
-    ax.plot([0.4, 0.6], [0.35, 0.55], color='black', lw=2)
-    ax.plot([0.6, 0.8], [0.55, 0.55], color='black', lw=2)
-
-    # Demi 1
-    if len(demi) >= 1:
-        m1 = demi.iloc[0]
-        ax.text(0.05, 0.805, f"{m1['Équipe A']} ({int(m1['Score A'])})", fontsize=11, va='center')
-        ax.text(0.05, 0.705, f"{m1['Équipe B']} ({int(m1['Score B'])})", fontsize=11, va='center')
-        ax.text(0.05, 0.675, f"{m1['Durée (min)']} min", fontsize=9, color="gray")
-
-    # Demi 2
-    if len(demi) >= 2:
-        m2 = demi.iloc[1]
-        ax.text(0.05, 0.405, f"{m2['Équipe A']} ({int(m2['Score A'])})", fontsize=11, va='center')
-        ax.text(0.05, 0.305, f"{m2['Équipe B']} ({int(m2['Score B'])})", fontsize=11, va='center')
-        ax.text(0.05, 0.275, f"{m2['Durée (min)']} min", fontsize=9, color="gray")
-
-    # Finale
-    if not finale.empty:
-        m3 = finale.iloc[0]
-        ax.text(0.5, 0.57, f"{m3['Équipe A']} ({int(m3['Score A'])})", fontsize=12, fontweight="bold", va='center')
-        ax.text(0.5, 0.52, f"{m3['Équipe B']} ({int(m3['Score B'])})", fontsize=12, fontweight="bold", va='center')
-        ax.text(0.5, 0.49, f"{m3['Durée (min)']} min", fontsize=9, color="gray")
-
-        # Champion
-        if m3["Gagnant"]:
-            ax.text(0.82, 0.55, f"🏆 {m3['Gagnant']}", fontsize=14, color="gold", fontweight="bold", va='center')
-        else:
-            ax.text(0.82, 0.55, "CHAMPION", fontsize=12, fontweight="bold",
-                    bbox=dict(facecolor="lightgray", edgecolor="black"), va='center')
-
-    ax.text(0.12, 0.88, "Demi-finales", fontsize=13, fontweight="bold")
-    ax.text(0.48, 0.65, "Finale", fontsize=13, fontweight="bold")
-
-    st.pyplot(fig)
-
-afficher_bracket()
