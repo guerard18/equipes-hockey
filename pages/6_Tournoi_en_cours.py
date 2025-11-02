@@ -58,13 +58,18 @@ st.divider()
 st.subheader("🕓 Horaire et résultats des matchs")
 
 for i, row in matchs.iterrows():
-    heure = "" if pd.isna(row["Heure"]) else row["Heure"]
-    phase_label = row["Phase"]
+    heure = "" if pd.isna(row["Heure"]) else str(row["Heure"]).strip()
 
-    # Ajouter "Éliminatoire" à toutes les phases
-    phase_label = f"Éliminatoire — {phase_label}"
+    # Affichage propre de la phase
+    if row["Phase"] == "Ronde":
+        phase_label = "Ronde éliminatoire"
+    elif row["Phase"] == "Demi-finale":
+        phase_label = "Demi-finale"
+    elif row["Phase"] == "Finale":
+        phase_label = "Finale"
+    else:
+        phase_label = row["Phase"]
 
-    # Affichage du titre du match / pause
     st.markdown(f"### 🕓 {heure} — {phase_label}")
 
     if row["Type"] == "Match":
@@ -80,7 +85,7 @@ for i, row in matchs.iterrows():
                 st.caption(f"👑 {capitaines[row['Équipe B']]}")
             score_b = st.number_input("", min_value=0, value=int(row["Score B"]), key=f"b{i}")
         with col3:
-            if row["Phase"] == "Ronde":  # prolongation seulement en ronde
+            if row["Phase"] == "Ronde":
                 prolong = st.checkbox("Prolongation", value=bool(row["Prolongation"]), key=f"p{i}")
                 matchs.loc[i, "Prolongation"] = prolong
             else:
@@ -89,7 +94,7 @@ for i, row in matchs.iterrows():
             gagnant = row["Équipe A"] if score_a > score_b else row["Équipe B"] if score_b > score_a else ""
             matchs.loc[i, ["Score A", "Score B", "Gagnant"]] = [score_a, score_b, gagnant]
 
-        # Boutons dynamiques
+        # Boutons dynamiques (demi et finale)
         if "1er vs 4e" in str(row["Équipe A"]):
             st.markdown("➡️ **Cliquez ici pour générer les demi-finales :**")
             if st.button("⚙️ Mettre à jour les demi-finales maintenant", key=f"demi{i}"):
@@ -102,8 +107,9 @@ for i, row in matchs.iterrows():
 
     else:
         # Affichage des pauses (sans NaN)
-        if str(row["Équipe A"]).strip() != "":
-            st.info(f"🧊 {row['Équipe A']} ({row['Durée (min)']} minutes)")
+        texte_pause = str(row["Équipe A"]).strip()
+        if texte_pause and texte_pause.lower() != "nan":
+            st.info(f"🧊 {texte_pause} ({row['Durée (min)']} minutes)")
         else:
             st.info(f"🧊 Pause ({row['Durée (min)']} minutes)")
 
