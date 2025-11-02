@@ -2,62 +2,72 @@ import streamlit as st
 import pandas as pd
 import os
 
-st.title("📈 Statistiques des joueurs")
+st.title("📊 Statistiques des joueurs")
 
+path = "data/historique.csv"
 players_path = "data/joueurs.csv"
-history_path = "data/historique.csv"
 
-if not os.path.exists(history_path):
+if not os.path.exists(path):
     st.warning("Aucun historique trouvé pour le moment.")
+    st.stop()
+
+# Charger les données
+hist = pd.read_csv(path)
+players = pd.read_csv(players_path) if os.path.exists(players_path) else pd.DataFrame()
+
+# --- Sélecteur de saison ---
+if "Saison" in hist.columns:
+    saisons = sorted(hist["Saison"].dropna().unique(), reverse=True)
+    choix_saison = st.selectbox("🏒 Choisir la saison :", ["Toutes"] + saisons)
+    if choix_saison != "Toutes":
+        hist = hist[hist["Saison"] == choix_saison]
+        st.info(f"📅 Saison sélectionnée : **{choix_saison}** — {len(hist)} matchs trouvés.")
 else:
-    hist = pd.read_csv(history_path)
-    joueurs = pd.read_csv(players_path)
+    st.warning("⚠️ Aucune colonne 'Saison' trouvée dans l'historique.")
+    choix_saison = "Toutes"
 
-    # Vérification de la colonne Date
-    if "Date" not in hist.columns:
-        st.error("❌ Le fichier historique ne contient pas de colonne 'Date'. Vérifie ton historique.csv.")
-    else:
-        stats = pd.DataFrame({"nom": joueurs["nom"].unique()})
-        stats["Matchs joués"] = 0
-        stats["Fois BLANCS"] = 0
-        stats["Fois NOIRS"] = 0
+if hist.empty:
+    st.warning("Aucune donnée pour la saison sélectionnée.")
+    st.stop()
 
-        # Calcul des présences uniques par date
-        presence_par_joueur = {}
-        for _, match in hist.iterrows():
-            date = str(match["Date"])
-            blancs = str(match.get("Équipe_BLANCS", "")).split(", ")
-            noirs = str(match.get("Équipe_NOIRS", "")).split(", ")
-            joueurs_du_match = set(blancs + noirs)
-            for j in joueurs_du_match:
-                if j not in presence_par_joueur:
-                    presence_par_joueur[j] = set()
-                presence_par_joueur[j].add(date)
+# --- Calcul du nombre de matchs par joueur ---
+joueurs_stats = {}
 
-        # Nombre de matchs joués par joueur
-        stats["Matchs joués"] = stats["nom"].apply(lambda x: len(presence_par_joueur.get(x, set())))
+def ajouter_presence(equipe):
+    if isinstance(equipe, str):
+        for nom in [x.strip() for x in equipe.split(",") if x.strip()]:
+            joueurs_stats[nom] = joueurs_stats.get(nom, 0) + 1
 
-        # Compter les fois BLANCS / NOIRS
-        for _, match in hist.iterrows():
-            blancs = str(match.get("Équipe_BLANCS", "")).split(", ")
-            noirs = str(match.get("Équipe_NOIRS", "")).split(", ")
-            for j in stats["nom"]:
-                if j in blancs:
-                    stats.loc[stats["nom"] == j, "Fois BLANCS"] += 1
-                elif j in noirs:
-                    stats.loc[stats["nom"] == j, "Fois NOIRS"] += 1
+for _, row in hist.iterrows():
+    ajouter_presence(row["Équipe_BLANCS"])
+    ajouter_presence(row["Équipe_NOIRS"])
 
-        # Trier par matchs joués décroissants
-        stats = stats.sort_values(by=["Matchs joués", "Fois BLANCS", "Fois NOIRS"], ascending=False)
+stats_df = pd.DataFrame(
+    [{"Joueur": j, "Matchs joués": c} for j, c in joueurs_stats.items()]
+).sort_values(by="Matchs joués", ascending=False)
 
-        st.dataframe(stats, use_container_width=True, hide_index=True)
+# --- Fusion avec les talents si disponibles ---
+if not players.empty:
+    stats_df = stats_df.merge(players[["nom", "talent_attaque", "talent_defense"]],
+                              left_on="Joueur", right_on="nom", how="left")
+    stats_df.drop(columns=["nom"], inplace=True)
 
-        total_matchs = hist["Date"].nunique() if "Date" in hist.columns else 0
-        st.write(f"### 📅 Total de matchs enregistrés : {total_matchs}")
+# --- Affichage ---
+st.subheader("📋 Statistiques individuelles")
+st.dataframe(stats_df, use_container_width=True)
 
-        st.download_button(
-            label="⬇️ Télécharger les statistiques (CSV)",
-            data=stats.to_csv(index=False).encode("utf-8"),
-            file_name="statistiques_joueurs.csv",
-            mime="text/csv"
-        )
+# --- Résumé global ---
+st.divider()
+st.subheader("📈 Résumé global de la saison")
+
+nb_matchs = hist["Date"].nunique()
+moy_B = hist["Moyenne_BLANCS"].mean()
+moy_N = hist["Moyenne_NOIRS"].mean()
+
+col1, col2, col3 = st.columns(3)
+col1.metric("Matchs joués", nb_matchs)
+col2.metric("Moyenne équipe BLANCS", round(moy_B, 2))
+col3.metric("Moyenne équipe NOIRS", round(moy_N, 2))
+
+if choix_saison != "Toutes":
+    st.caption(f"Filtré pour la saison {choix_saison}")
