@@ -53,6 +53,17 @@ for col in ["Score A", "Score B", "Gagnant", "Prolongation"]:
         else:
             matchs[col] = ""
 
+# --- Boutons au-dessus des phases ---
+if any(matchs["Phase"].str.contains("Demi-finale", na=False)):
+    st.markdown("### ⚙️ Mettre à jour les demi-finales")
+    if st.button("🔁 Mettre à jour maintenant"):
+        st.session_state["update_demi"] = True
+
+if any(matchs["Phase"].str.contains("Finale", na=False)):
+    st.markdown("### 🏆 Mettre à jour la finale")
+    if st.button("🔁 Mettre à jour la finale maintenant"):
+        st.session_state["update_finale"] = True
+
 # --- Saisie des résultats ---
 st.divider()
 st.subheader("🕓 Horaire et résultats des matchs")
@@ -60,7 +71,7 @@ st.subheader("🕓 Horaire et résultats des matchs")
 for i, row in matchs.iterrows():
     heure = "" if pd.isna(row["Heure"]) else str(row["Heure"]).strip()
 
-    # Affichage propre de la phase
+    # Phases en français
     if row["Phase"] == "Ronde":
         phase_label = "Ronde éliminatoire"
     elif row["Phase"] == "Demi-finale":
@@ -94,19 +105,7 @@ for i, row in matchs.iterrows():
             gagnant = row["Équipe A"] if score_a > score_b else row["Équipe B"] if score_b > score_a else ""
             matchs.loc[i, ["Score A", "Score B", "Gagnant"]] = [score_a, score_b, gagnant]
 
-        # Boutons dynamiques (demi et finale)
-        if "1er vs 4e" in str(row["Équipe A"]):
-            st.markdown("➡️ **Cliquez ici pour générer les demi-finales :**")
-            if st.button("⚙️ Mettre à jour les demi-finales maintenant", key=f"demi{i}"):
-                st.session_state["update_demi"] = True
-
-        if "Gagnants demi-finales" in str(row["Équipe A"]):
-            st.markdown("➡️ **Cliquez ici pour générer la finale :**")
-            if st.button("⚙️ Mettre à jour la finale maintenant", key=f"finale{i}"):
-                st.session_state["update_finale"] = True
-
     else:
-        # Affichage des pauses (sans NaN)
         texte_pause = str(row["Équipe A"]).strip()
         if texte_pause and texte_pause.lower() != "nan":
             st.info(f"🧊 {texte_pause} ({row['Durée (min)']} minutes)")
@@ -207,30 +206,7 @@ def afficher_bracket():
         ax.text(0.78, 0.14, f"{int(m['Score A'])}-{int(m['Score B'])}", fontsize=12, color="gold", fontweight="bold")
 
         if m["Gagnant"]:
-            st.markdown(f"<h2 style='text-align:center; color:gold;'>🏆 CHAMPION : {m['Gagnant']} ✨</h2>", unsafe_allow_html=True)
-            st.markdown(
-                """
-                <style>
-                @keyframes sparkle {
-                    0% { opacity: 0; transform: scale(0.8) rotate(0deg); }
-                    50% { opacity: 1; transform: scale(1.3) rotate(180deg); }
-                    100% { opacity: 0; transform: scale(0.8) rotate(360deg); }
-                }
-                .sparkle {
-                    position: fixed;
-                    top: 0; left: 0;
-                    width: 100vw; height: 100vh;
-                    pointer-events: none;
-                    z-index: 9999;
-                    background-image: radial-gradient(circle, gold 1px, transparent 1px);
-                    background-size: 10px 10px;
-                    animation: sparkle 2s infinite ease-in-out;
-                }
-                </style>
-                <div class='sparkle'></div>
-                """,
-                unsafe_allow_html=True,
-            )
+            st.markdown(f"<h2 style='text-align:center; color:gold;'>🏆 CHAMPION : {m['Gagnant']}</h2>", unsafe_allow_html=True)
 
     plt.text(0.12, 0.83, "Demi-finales", fontsize=14, fontweight="bold")
     plt.text(0.6, 0.25, "Finale", fontsize=14, fontweight="bold")
