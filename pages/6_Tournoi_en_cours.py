@@ -4,7 +4,6 @@ import os
 import json
 from datetime import datetime
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
 
 st.title("🏒 Tournoi en cours")
 
@@ -70,7 +69,6 @@ for i, row in matchs.iterrows():
     else:
         phase_label = row["Phase"]
 
-    # Affichage du match / pause
     st.markdown(f"### 🕓 {heure} — {phase_label}")
 
     if row["Type"] == "Match":
@@ -102,7 +100,7 @@ for i, row in matchs.iterrows():
         else:
             st.info(f"🧊 Pause ({row['Durée (min)']} minutes)")
 
-        # --- Bouton "Mettre à jour les demi-finales" juste après la pause avant les demi ---
+        # --- Bouton mise à jour demi ---
         if "avant la finale" not in texte_pause and any(matchs["Phase"].str.contains("Demi-finale")):
             idx_demi = matchs[matchs["Phase"] == "Demi-finale"].index.min()
             if i == idx_demi - 1:
@@ -110,7 +108,7 @@ for i, row in matchs.iterrows():
                 if st.button("🔁 Mettre à jour maintenant", key="update_demi_button"):
                     st.session_state["update_demi"] = True
 
-        # --- Bouton "Mettre à jour la finale" juste après la pause avant la finale ---
+        # --- Bouton mise à jour finale ---
         if "avant la finale" in texte_pause and any(matchs["Phase"].str.contains("Finale")):
             st.markdown("### 🏆 **Mettre à jour la finale**")
             if st.button("🔁 Mettre à jour la finale maintenant", key="update_finale_button"):
@@ -157,7 +155,7 @@ def classement_from_results(df):
 classement = classement_from_results(matchs)
 st.dataframe(classement)
 
-# --- Mise à jour des demi-finales ---
+# --- Mise à jour des phases ---
 if "update_demi" in st.session_state and st.session_state["update_demi"]:
     if len(classement) >= 4:
         top4 = classement["Équipe"].tolist()[:4]
@@ -167,7 +165,6 @@ if "update_demi" in st.session_state and st.session_state["update_demi"]:
         st.success("✅ Demi-finales mises à jour avec succès !")
         st.session_state["update_demi"] = False
 
-# --- Mise à jour de la finale ---
 if "update_finale" in st.session_state and st.session_state["update_finale"]:
     demi = matchs[matchs["Phase"] == "Demi-finale"]
     gagnants = demi["Gagnant"].tolist()
@@ -177,43 +174,40 @@ if "update_finale" in st.session_state and st.session_state["update_finale"]:
         st.success("✅ Finale mise à jour avec les gagnants des demi-finales !")
         st.session_state["update_finale"] = False
 
-# --- Bracket du tournoi ---
+# --- Nouveau Bracket (style minimaliste comme l’image) ---
 st.divider()
 st.subheader("🎯 Bracket du tournoi")
 
-def afficher_bracket():
-    fig, ax = plt.subplots(figsize=(9, 5))
+def draw_simple_bracket():
+    fig, ax = plt.subplots(figsize=(6, 4))
     ax.axis("off")
 
-    phases = ["Demi-finale", "Finale"]
-    x_pos = [0.1, 0.55]
-    y_start = [0.7, 0.45]
-    y_step = 0.3
+    # Lignes de la demi-finale gauche
+    ax.plot([0.1, 0.3], [0.8, 0.8], color='black', lw=2)
+    ax.plot([0.1, 0.3], [0.6, 0.6], color='black', lw=2)
+    ax.plot([0.3, 0.4], [0.8, 0.7], color='black', lw=2)
+    ax.plot([0.3, 0.4], [0.6, 0.7], color='black', lw=2)
 
-    for phase, x in zip(phases, x_pos):
-        matches = matchs[matchs["Phase"].str.contains(phase, na=False)]
-        for j, (_, m) in enumerate(matches.iterrows()):
-            y = y_start[0] - j * y_step
-            rect = Rectangle((x, y), 0.3, 0.1, linewidth=2, edgecolor="black", facecolor="white")
-            ax.add_patch(rect)
-            ax.text(x + 0.01, y + 0.065, m['Équipe A'], fontsize=10, fontweight="bold")
-            ax.text(x + 0.01, y + 0.03, m['Équipe B'], fontsize=10, fontweight="bold")
-            ax.text(x + 0.24, y + 0.04, f"{int(m['Score A'])}-{int(m['Score B'])}", fontsize=12, fontweight="bold")
+    # Lignes vers la finale
+    ax.plot([0.4, 0.6], [0.7, 0.7], color='black', lw=2)
+    ax.plot([0.6, 0.7], [0.7, 0.5], color='black', lw=2)
 
-    finale = matchs[matchs["Phase"] == "Finale"]
-    if not finale.empty:
-        m = finale.iloc[0]
-        rect = Rectangle((0.55, 0.1), 0.3, 0.1, linewidth=3, edgecolor="gold", facecolor="white")
-        ax.add_patch(rect)
-        ax.text(0.56, 0.165, m['Équipe A'], fontsize=11, fontweight="bold")
-        ax.text(0.56, 0.13, m['Équipe B'], fontsize=11, fontweight="bold")
-        ax.text(0.78, 0.14, f"{int(m['Score A'])}-{int(m['Score B'])}", fontsize=12, color="gold", fontweight="bold")
+    # Lignes des demi-finales inférieures
+    ax.plot([0.1, 0.3], [0.4, 0.4], color='black', lw=2)
+    ax.plot([0.1, 0.3], [0.2, 0.2], color='black', lw=2)
+    ax.plot([0.3, 0.4], [0.4, 0.3], color='black', lw=2)
+    ax.plot([0.3, 0.4], [0.2, 0.3], color='black', lw=2)
 
-        if m["Gagnant"]:
-            st.markdown(f"<h2 style='text-align:center; color:gold;'>🏆 CHAMPION : {m['Gagnant']}</h2>", unsafe_allow_html=True)
+    # Ligne de finale
+    ax.plot([0.4, 0.6], [0.3, 0.3], color='black', lw=2)
 
-    plt.text(0.12, 0.83, "Demi-finales", fontsize=14, fontweight="bold")
-    plt.text(0.6, 0.25, "Finale", fontsize=14, fontweight="bold")
+    # Lien vers CHAMPION
+    ax.plot([0.6, 0.8], [0.5, 0.5], color='black', lw=2)
+    ax.text(0.81, 0.48, "CHAMPION", fontsize=10, fontweight="bold",
+            ha='left', va='center', bbox=dict(facecolor='lightgray', edgecolor='black'))
+
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
     st.pyplot(fig)
 
-afficher_bracket()
+draw_simple_bracket()
