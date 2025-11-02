@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
-from typing import List
+
+st.set_page_config(page_title="Tournoi en cours", page_icon="🏒", layout="centered")
 
 st.title("🏒 Tournoi en cours — Résultats, Classement & Bracket")
 
@@ -176,7 +177,7 @@ if not standings.empty and not demis.empty:
             new_df = update_semifinals_names(df.copy(), standings)
             save_bracket(new_df)
             st.success("✅ Demi-finales mises à jour avec les vraies équipes.")
-           st.rerun()
+            st.rerun()
         else:
             st.warning("⚠️ Tous les matchs de ronde ne sont pas terminés.")
 
@@ -205,7 +206,18 @@ if not finale.empty:
 # ---------- Champion ----------
 champ = champion_if_ready(df)
 if champ:
-    st.success(f"🏆 **CHAMPION : {champ}**")
+    st.balloons()
+    st.markdown(
+        f"""
+        <div style='text-align:center; margin-top:30px;'>
+            <h1 style='font-size:70px; color:#FFD700; text-shadow:2px 2px 5px #B8860B;'>
+                🏆 {champ} 🏆
+            </h1>
+            <h2 style='color:#DAA520;'>Champion du tournoi!</h2>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 # ---------- Réinitialisation ----------
 st.divider()
