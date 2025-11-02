@@ -18,25 +18,11 @@ else:
         st.error("❌ Le fichier historique ne contient pas de colonne 'Date'. Vérifie ton historique.csv.")
     else:
         stats = pd.DataFrame({"nom": joueurs["nom"].unique()})
-        stats["Présences"] = 0
+        stats["Matchs joués"] = 0
         stats["Fois BLANCS"] = 0
         stats["Fois NOIRS"] = 0
 
-        # Calcul des statistiques détaillées
-        for _, match in hist.iterrows():
-            date = str(match["Date"])
-            blancs = str(match.get("Équipe_BLANCS", "")).split(", ")
-            noirs = str(match.get("Équipe_NOIRS", "")).split(", ")
-
-            for j in stats["nom"]:
-                if j in blancs:
-                    stats.loc[stats["nom"] == j, "Fois BLANCS"] += 1
-                    stats.loc[stats["nom"] == j, "Présences"] += 1
-                elif j in noirs:
-                    stats.loc[stats["nom"] == j, "Fois NOIRS"] += 1
-                    stats.loc[stats["nom"] == j, "Présences"] += 1
-
-        # Nettoyage des doublons de dates : si un joueur apparaît deux fois le même jour, on ne compte qu'une présence
+        # Calcul des présences uniques par date
         presence_par_joueur = {}
         for _, match in hist.iterrows():
             date = str(match["Date"])
@@ -48,10 +34,21 @@ else:
                     presence_par_joueur[j] = set()
                 presence_par_joueur[j].add(date)
 
-        stats["Présences"] = stats["nom"].apply(lambda x: len(presence_par_joueur.get(x, set())))
+        # Nombre de matchs joués par joueur
+        stats["Matchs joués"] = stats["nom"].apply(lambda x: len(presence_par_joueur.get(x, set())))
 
-        # Trier par présences décroissantes
-        stats = stats.sort_values(by=["Présences", "Fois BLANCS", "Fois NOIRS"], ascending=False)
+        # Compter les fois BLANCS / NOIRS
+        for _, match in hist.iterrows():
+            blancs = str(match.get("Équipe_BLANCS", "")).split(", ")
+            noirs = str(match.get("Équipe_NOIRS", "")).split(", ")
+            for j in stats["nom"]:
+                if j in blancs:
+                    stats.loc[stats["nom"] == j, "Fois BLANCS"] += 1
+                elif j in noirs:
+                    stats.loc[stats["nom"] == j, "Fois NOIRS"] += 1
+
+        # Trier par matchs joués décroissants
+        stats = stats.sort_values(by=["Matchs joués", "Fois BLANCS", "Fois NOIRS"], ascending=False)
 
         st.dataframe(stats, use_container_width=True, hide_index=True)
 
