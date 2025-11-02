@@ -39,15 +39,12 @@ if joueurs.empty:
 
 st.write(f"**{len(joueurs)} joueurs présents.**")
 
-# --- Séparation attaquants / défenseurs ---
+# --- Si pas de colonne position, on en crée une ---
 if "position" not in joueurs.columns:
-    st.error("Le fichier joueurs.csv doit contenir une colonne 'Position'.")
-    st.stop()
+    st.warning("⚠️ Aucune colonne 'Position' trouvée — tous les joueurs seront considérés comme attaquants.")
+    joueurs["position"] = "Attaquant"
 
-attaquants = joueurs[joueurs["position"].str.lower().str.contains("attaquant", na=False)].copy()
-defenseurs = joueurs[joueurs["position"].str.lower().str.contains("defenseur", na=False)].copy()
-
-# --- Déterminer la colonne de talent ---
+# --- Trouver la colonne de talent ---
 talent_col = None
 for c in joueurs.columns:
     if "talent" in c:
@@ -55,8 +52,12 @@ for c in joueurs.columns:
         break
 
 if not talent_col:
-    st.error("Aucune colonne 'Talent' trouvée.")
+    st.error("Aucune colonne contenant 'talent' n’a été trouvée.")
     st.stop()
+
+# --- Séparation attaquants / défenseurs ---
+attaquants = joueurs[joueurs["position"].str.lower().str.contains("attaquant", na=False)].copy()
+defenseurs = joueurs[joueurs["position"].str.lower().str.contains("defenseur", na=False)].copy()
 
 # --- Création équilibrée de 4 équipes ---
 def creer_equipes_equilibrees():
@@ -66,6 +67,7 @@ def creer_equipes_equilibrees():
     attaquants_sorted = attaquants.sample(frac=1).sort_values(talent_col, ascending=False).reset_index(drop=True)
     defenseurs_sorted = defenseurs.sample(frac=1).sort_values(talent_col, ascending=False).reset_index(drop=True)
 
+    # Répartition équilibrée
     for i, row in attaquants_sorted.iterrows():
         equipes[f"Équipe {(i % nb_equipes) + 1}"].append(row)
     for i, row in defenseurs_sorted.iterrows():
