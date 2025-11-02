@@ -130,3 +130,4 @@ if st.button("📥 Générer le PDF"):
         file_name="Tournoi_resultats.pdf",
         mime="application/pdf"
     )
+st.info("➡️ Vous pouvez configurer un nouveau tournoi dans la page **Configuration (Onglet Tournoi)**.")
