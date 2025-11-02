@@ -3,6 +3,7 @@ import pandas as pd
 import os
 from datetime import datetime
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 st.title("🏆 Tournoi en cours")
 
@@ -152,18 +153,46 @@ st.subheader("🎯 Bracket du tournoi")
 
 def afficher_bracket():
     phases = ["Ronde", "Demi", "Finale"]
-    fig, ax = plt.subplots(figsize=(8, 6))
-    y_pos = {"Ronde": [4,3,2,1], "Demi": [2.5,1.5], "Finale": [2]}
-    x_pos = {"Ronde": 0, "Demi": 1, "Finale": 2}
+    fig, ax = plt.subplots(figsize=(9, 6))
+    x_pos = {"Ronde": 0, "Demi": 1.5, "Finale": 3}
+    colors = {"Ronde": "#f0f0f0", "Demi": "#d8eaff", "Finale": "#ffe4e1"}
 
+    # Calcul dynamique des positions Y
+    y_positions = {}
+    for phase in phases:
+        nb = len(edited[edited["Phase"] == phase])
+        if nb == 0:
+            y_positions[phase] = []
+        else:
+            y_positions[phase] = list(
+                reversed([i * (4 / (nb + 1)) + 0.5 for i in range(nb)])
+            )
+
+    box_centers = {}
     for _, m in edited.iterrows():
         phase = m["Phase"]
-        if phase not in phases: continue
+        if phase not in phases or len(y_positions[phase]) == 0:
+            continue
         x = x_pos[phase]
-        y = y_pos[phase].pop(0)
+        y = y_positions[phase].pop(0)
         txt = f"{m['Équipe A']} {m['Score A']} - {m['Score B']} {m['Équipe B']}"
-        ax.text(x, y, txt, ha="center", va="center", fontsize=10, bbox=dict(facecolor='white', edgecolor='black'))
-    ax.set_xlim(-0.5, 2.5)
+        ax.text(x, y, txt, ha="center", va="center", fontsize=9,
+                bbox=dict(facecolor=colors[phase], edgecolor='black', boxstyle="round,pad=0.4"))
+        box_centers.setdefault(phase, []).append((x, y, txt))
+
+    # Flèches reliant les phases
+    if "Demi" in box_centers and "Finale" in box_centers:
+        for i, demi in enumerate(box_centers["Demi"]):
+            fx, fy, _ = box_centers["Finale"][0]
+            ax.annotate("", xy=(fx - 0.5, fy), xytext=(demi[0] + 0.5, demi[1]),
+                        arrowprops=dict(arrowstyle="->", color="gray", lw=1.2))
+    if "Ronde" in box_centers and "Demi" in box_centers:
+        for i, demi in enumerate(box_centers["Demi"]):
+            src_y = box_centers["Ronde"][i*2][1] if len(box_centers["Ronde"]) > i*2 else demi[1]
+            ax.annotate("", xy=(demi[0] - 0.5, demi[1]), xytext=(x_pos["Ronde"] + 0.5, src_y),
+                        arrowprops=dict(arrowstyle="->", color="gray", lw=1.2))
+
+    ax.set_xlim(-0.5, 3.5)
     ax.set_ylim(0, 5)
     ax.axis("off")
     plt.tight_layout()
