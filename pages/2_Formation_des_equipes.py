@@ -178,3 +178,11 @@ if teams:
             mime="application/pdf"
         )
 
+# --- BOUTON VERS TOURNOI ---
+st.divider()
+st.subheader("🏆 Mode tournoi")
+st.markdown("Vous pouvez aussi créer un tournoi avec les joueurs présents actuels.")
+if st.button("➡️ Créer un tournoi à partir des joueurs présents"):
+    st.session_state["joueurs_pour_tournoi"] = players_present
+    st.success("✅ Joueurs copiés vers le mode tournoi.")
+    st.info("Allez maintenant dans la page **Configuration → Onglet Tournoi** pour lancer la création du tournoi.")
