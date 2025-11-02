@@ -98,13 +98,19 @@ def generate_teams(players_present: pd.DataFrame):
         moyN=moyN
     )
 
-# --- GÉNÉRATION ET AFFICHAGE ---
+# --- GÉNÉRATION DES ÉQUIPES ---
 if st.button("🎯 Générer les équipes équilibrées"):
     st.session_state["teams"] = generate_teams(players_present)
 
 teams = st.session_state.get("teams")
 
-if teams:
+# --- AFFICHAGE AVEC PROTECTION ---
+if not teams:
+    st.warning("Aucune équipe n’a encore été générée.")
+elif not all(k in teams for k in ["equipeB_trios", "equipeN_trios", "equipeB_duos", "equipeN_duos"]):
+    st.error("⚠️ Erreur de génération : certaines données d’équipes sont manquantes.")
+    st.info("Cliquez sur **🎯 Générer les équipes équilibrées** pour relancer la création.")
+else:
     st.subheader("⚪ BLANCS")
     for i, trio in enumerate(teams["equipeB_trios"], 1):
         if not trio.empty:
