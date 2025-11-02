@@ -32,8 +32,12 @@ else:
                 elif j in noirs:
                     stats.loc[stats["nom"] == j, "Fois NOIRS"] += 1
 
+        # Compter les présences actuelles
         joueurs_present = joueurs[joueurs["present"] == True]["nom"].tolist()
         stats["Présences"] = stats["nom"].apply(lambda x: 1 if x in joueurs_present else 0)
+
+        # Trier du plus présent au moins présent, puis par nom
+        stats = stats.sort_values(by=["Présences", "Fois BLANCS", "Fois NOIRS"], ascending=False)
 
         st.dataframe(stats, use_container_width=True, hide_index=True)
 
