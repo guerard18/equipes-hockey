@@ -37,7 +37,6 @@ def load_bracket():
     df["Score B"] = pd.to_numeric(df["Score B"], errors="coerce").fillna(0).astype(int)
     df["Terminé"] = df["Terminé"].astype(str).str.lower().isin(["true", "1", "yes"])
     df["Prolongation"] = df["Prolongation"].astype(str).str.lower().isin(["true", "1", "yes"])
-
     return df[COLS]
 
 def save_bracket(df):
@@ -127,11 +126,38 @@ if df.empty:
 st.subheader("🗓️ Horaire & Résultats")
 
 edited = False
+standings = compute_standings(df)
+
 for idx, row in df.iterrows():
+    # --- Affichage des pauses et gestion boutons automatiques ---
     if row["Type"] == "Pause":
         st.markdown(f"**{row['Heure']} — {row['Équipe A']}** ({int(row['Durée (min)'])} min)")
+        
+        # --- Si c'est la pause avant les demi-finales ---
+        if "Demi" in row["Équipe A"]:
+            if not standings.empty:
+                st.markdown("#### ⚙️ Mettre à jour les demi-finales")
+                if st.button("🔁 Mettre à jour les demi-finales maintenant"):
+                    ronde = df[(df["Phase"] == "Ronde") & (df["Type"] == "Match")]
+                    if not ronde.empty and ronde["Terminé"].all():
+                        new_df = update_semifinals_names(df.copy(), standings)
+                        save_bracket(new_df)
+                        st.success("✅ Demi-finales mises à jour avec les vraies équipes.")
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ Tous les matchs de ronde ne sont pas terminés.")
+        
+        # --- Si c'est la pause avant la finale ---
+        if "finale" in row["Équipe A"].lower():
+            st.markdown("#### ⚙️ Mettre à jour la finale")
+            if st.button("🔁 Mettre à jour la finale maintenant"):
+                new_df = update_final_names(df.copy())
+                save_bracket(new_df)
+                st.success("✅ Finale mise à jour avec les gagnants des demi-finales.")
+                st.rerun()
         continue
 
+    # --- Matchs réguliers ---
     col1, col2, col3, col4, col5 = st.columns([2, 3, 3, 2, 3])
     with col1:
         st.write(f"**{row['Heure']}**")
@@ -158,63 +184,101 @@ if edited:
 
 # ---------- Classement ----------
 st.subheader("📊 Classement (Ronde)")
-standings = compute_standings(df)
 if standings.empty:
     st.info("Entrez les scores de la ronde pour générer le classement.")
 else:
     st.dataframe(standings, use_container_width=True)
 
-# ---------- Bracket ----------
-st.subheader("🎯 Bracket")
-
-# Bouton avant les demi-finales
-demis = df[(df["Phase"] == "Demi-finale") & (df["Type"] == "Match")]
-if not standings.empty and not demis.empty:
-    st.markdown("#### ⚙️ Mettre à jour les demi-finales")
-    if st.button("🔁 Mettre à jour les demi-finales maintenant"):
-        ronde = df[(df["Phase"] == "Ronde") & (df["Type"] == "Match")]
-        if not ronde.empty and ronde["Terminé"].all():
-            new_df = update_semifinals_names(df.copy(), standings)
-            save_bracket(new_df)
-            st.success("✅ Demi-finales mises à jour avec les vraies équipes.")
-            st.rerun()
-        else:
-            st.warning("⚠️ Tous les matchs de ronde ne sont pas terminés.")
-
-# Affichage des demi-finales
-if not demis.empty:
-    for i, r in demis.iterrows():
-        st.write(f"**Demi-finale {i - demis.index[0] + 1}** — {r['Équipe A']} vs {r['Équipe B']} "
-                 f"{'(OT)' if r['Prolongation'] else ''} "
-                 f"{f'[{r['Score A']}–{r['Score B']}]' if r['Terminé'] else ''}")
-
-# Bouton avant la finale
-finale = df[(df["Phase"] == "Finale") & (df["Type"] == "Match")]
-if not finale.empty:
-    st.markdown("#### ⚙️ Mettre à jour la finale")
-    if st.button("🔁 Mettre à jour la finale maintenant"):
-        new_df = update_final_names(df.copy())
-        save_bracket(new_df)
-        st.success("✅ Finale mise à jour avec les gagnants des demi-finales.")
-        st.rerun()
-
-    rf = finale.iloc[0]
-    st.write(f"**Finale** — {rf['Équipe A']} vs {rf['Équipe B']} "
-             f"{'(OT)' if rf['Prolongation'] else ''} "
-             f"{f'[{rf['Score A']}–{rf['Score B']}]' if rf['Terminé'] else ''}")
-
 # ---------- Champion ----------
 champ = champion_if_ready(df)
 if champ:
-    st.balloons()
     st.markdown(
         f"""
-        <div style='text-align:center; margin-top:30px;'>
-            <h1 style='font-size:70px; color:#FFD700; text-shadow:2px 2px 5px #B8860B;'>
-                🏆 {champ} 🏆
-            </h1>
-            <h2 style='color:#DAA520;'>Champion du tournoi!</h2>
-        </div>
+        <style>
+        @keyframes goldShine {{
+            0% {{ background-position: 0% 50%; }}
+            100% {{ background-position: 100% 50%; }}
+        }}
+        .champion {{
+            text-align: center;
+            font-size: 70px;
+            font-weight: bold;
+            background: linear-gradient(90deg, #FFD700, #FFFACD, #FFD700);
+            background-size: 400% 400%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: goldShine 3s linear infinite;
+            text-shadow: 2px 2px 5px #B8860B;
+            margin-top: 40px;
+        }}
+        .subtitle {{
+            text-align: center;
+            color: #FFD700;
+            font-size: 30px;
+            text-shadow: 1px 1px 3px #B8860B;
+            margin-bottom: 60px;
+        }}
+        </style>
+        <div class="champion">🏆 {champ} 🏆</div>
+        <div class="subtitle">Champion du tournoi!</div>
+
+        <canvas id="confetti-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;"></canvas>
+
+        <script>
+        const canvas = document.getElementById('confetti-canvas');
+        const ctx = canvas.getContext('2d');
+        let confettis = [];
+        const colors = ['#FFD700','#DAA520','#FFF8DC','#FFEC8B','#F0E68C'];
+
+        function random(min,max) {{ return Math.random()*(max-min)+min; }}
+        function createConfetti() {{
+            for (let i=0; i<200; i++) {{
+                confettis.push({{
+                    x: random(0, window.innerWidth),
+                    y: random(-window.innerHeight, 0),
+                    r: random(2,6),
+                    d: random(1,3),
+                    color: colors[Math.floor(Math.random()*colors.length)],
+                    tilt: random(-10,10),
+                    tiltAngleIncrement: random(0.02,0.05),
+                    tiltAngle: 0
+                }});
+            }}
+        }}
+        function drawConfetti() {{
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            confettis.forEach(c => {{
+                ctx.beginPath();
+                ctx.lineWidth = c.r;
+                ctx.strokeStyle = c.color;
+                ctx.moveTo(c.x + c.tilt + c.r, c.y);
+                ctx.lineTo(c.x + c.tilt, c.y + c.tilt + c.r);
+                ctx.stroke();
+            }});
+            update();
+        }}
+        function update() {{
+            confettis.forEach(c => {{
+                c.tiltAngle += c.tiltAngleIncrement;
+                c.y += (Math.cos(c.d) + 2 + c.r / 2) / 2;
+                c.x += Math.sin(0.01);
+                if (c.y > canvas.height) {{
+                    c.y = 0;
+                    c.x = random(0, window.innerWidth);
+                }}
+            }});
+        }}
+        function animateConfetti() {{
+            drawConfetti();
+            requestAnimationFrame(animateConfetti);
+        }}
+        window.onload = function() {{
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            createConfetti();
+            animateConfetti();
+        }};
+        </script>
         """,
         unsafe_allow_html=True
     )
