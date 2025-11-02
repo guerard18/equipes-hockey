@@ -3,12 +3,12 @@ import pandas as pd
 import os
 import random
 import itertools
-from datetime import datetime, timedelta, time, date
+import json
+from datetime import datetime, timedelta, time
 from utils import load_players
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 import io
-import json
 
 st.title("🏒 Génération du tournoi (4 équipes fixes)")
 
@@ -33,7 +33,7 @@ if len(players_present) < 10:
 
 # --- Sélection de la date du tournoi ---
 st.subheader("📅 Date du tournoi")
-date_tournoi = st.date_input("Sélectionne la date du tournoi :", value=date.today())
+date_tournoi = st.date_input("Choisir la date du tournoi :", datetime.now().date())
 
 # --- Snake draft équilibré ---
 def snake_draft(df, nb_groupes, colonne):
@@ -62,16 +62,6 @@ def generer_equipes_tournoi(players_present):
     attaquants = players_present[players_present["poste"] == "Attaquant"]
     defenseeurs = players_present[players_present["poste"] == "Défenseur"]
 
-    # Ajustement du nombre de joueurs
-    if len(attaquants) < 24:
-        supl = defenseeurs.nlargest(24 - len(attaquants), "talent_attaque")
-        attaquants = pd.concat([attaquants, supl])
-        defenseeurs = defenseeurs.drop(supl.index)
-    if len(defenseeurs) < 16:
-        supl = attaquants.nlargest(16 - len(defenseeurs), "talent_defense")
-        defenseeurs = pd.concat([defenseeurs, supl])
-        attaquants = attaquants.drop(supl.index)
-
     trios = snake_draft(attaquants, 8, "talent_attaque")
     duos = snake_draft(defenseeurs, 8, "talent_defense")
     random.shuffle(trios)
@@ -93,32 +83,45 @@ def generer_equipes_tournoi(players_present):
 # --- Générer les équipes ---
 if st.button("🎯 Générer les équipes du tournoi"):
     st.session_state["tournoi_equipes"] = generer_equipes_tournoi(players_present)
+    st.session_state["capitaines"] = {}
     st.success("✅ Équipes du tournoi générées !")
 
 equipes = st.session_state.get("tournoi_equipes")
+capitaines = st.session_state.get("capitaines", {})
 
 if equipes:
-    st.subheader("📋 Composition des équipes")
+    st.subheader("📋 Composition des équipes et choix des capitaines")
     for nom, eq in equipes.items():
         st.markdown(f"### {nom} — Moyenne : **{eq['moyenne']}**")
+        eq_joueurs = []
         for i, trio in enumerate(eq["trios"], 1):
             if not trio.empty:
-                st.write(f"**Trio {i} ({round(trio['talent_attaque'].mean(),2)}) :** {', '.join(trio['nom'])}")
+                noms = trio["nom"].tolist()
+                st.write(f"**Trio {i} ({round(trio['talent_attaque'].mean(),2)}) :** {', '.join(noms)}")
+                eq_joueurs += noms
         for i, duo in enumerate(eq["duos"], 1):
             if not duo.empty:
-                st.write(f"**Duo {i} ({round(duo['talent_defense'].mean(),2)}) :** {', '.join(duo['nom'])}")
+                noms = duo["nom"].tolist()
+                st.write(f"**Duo {i} ({round(duo['talent_defense'].mean(),2)}) :** {', '.join(noms)}")
+                eq_joueurs += noms
+
+        capitaine = st.selectbox(f"👑 Choisir le capitaine pour {nom}", eq_joueurs, key=f"cap_{nom}")
+        capitaines[nom] = capitaine
+        st.markdown(f"🧢 **Capitaine choisi : {capitaine}**")
         st.divider()
+
+    st.session_state["capitaines"] = capitaines
 
     # --- Paramètres de temps ---
     st.subheader("⏱️ Paramètres de l’horaire")
     start_time = st.time_input("Heure de début du premier match", time(18, 0))
-    match_duration = st.number_input("Durée d’un match de ronde (minutes)", 10, 120, 15, 5)
-    demi_duration = st.number_input("Durée d’une demi-finale (minutes)", 10, 120, 17, 5)
-    finale_duration = st.number_input("Durée de la finale (minutes)", 10, 120, 20, 5)
-    pause = st.number_input("Pause entre les matchs (minutes)", 0, 60, 2, 1)
+    match_duration = st.number_input("Durée d’un match de ronde (minutes)", 10, 120, 25, 5)
+    demi_duration = st.number_input("Durée d’une demi-finale (minutes)", 10, 120, 30, 5)
+    finale_duration = st.number_input("Durée de la finale (minutes)", 10, 120, 35, 5)
+    pause = st.number_input("Pause entre les matchs (minutes)", 0, 60, 5, 5)
     zamboni_pause = st.number_input("Durée de la pause Zamboni (minutes)", 5, 30, 10, 5)
 
-    # --- Génération de l'horaire ---
+    # --- Générer le tournoi ---
     def generer_matchs_equilibres(equipes):
         noms = list(equipes.keys())
         matchs_possibles = list(itertools.combinations(noms, 2))
@@ -129,10 +132,10 @@ if equipes:
 
         heure = datetime.combine(datetime.today(), start_time)
         rows = []
-        match_counter = 0  # compteur global pour pauses Zamboni
+        match_counter = 0
 
         # --- Matchs de ronde ---
-        for i, row in matchs.iterrows():
+        for _, row in matchs.iterrows():
             rows.append({
                 "Heure": heure.strftime("%H:%M"),
                 "Équipe A": row["Équipe A"],
@@ -143,8 +146,6 @@ if equipes:
             })
             heure += timedelta(minutes=match_duration + pause)
             match_counter += 1
-
-            # Pause Zamboni après chaque 3 matchs
             if match_counter % 3 == 0:
                 rows.append({
                     "Heure": heure.strftime("%H:%M"),
@@ -168,8 +169,6 @@ if equipes:
             })
             heure += timedelta(minutes=demi_duration + pause)
             match_counter += 1
-
-            # Pause Zamboni après chaque 3 matchs
             if match_counter % 3 == 0:
                 rows.append({
                     "Heure": heure.strftime("%H:%M"),
@@ -181,7 +180,7 @@ if equipes:
                 })
                 heure += timedelta(minutes=zamboni_pause)
 
-        # --- Pause forcée avant la finale ---
+        # --- Pause avant la finale ---
         rows.append({
             "Heure": heure.strftime("%H:%M"),
             "Équipe A": "🧊 Pause Zamboni (avant la finale)",
@@ -202,62 +201,22 @@ if equipes:
             "Type": "Match"
         })
 
-        df = pd.DataFrame(rows)
-        df["Date du tournoi"] = str(date_tournoi)
-        return df
+        return pd.DataFrame(rows)
 
     # --- Bouton principal ---
     if st.button("🏁 Créer le tournoi complet"):
-        with st.spinner("⏳ Génération du tournoi..."):
-            matchs = generer_matchs_equilibres(equipes)
-            matchs.to_csv(BRACKET_FILE, index=False)
+        matchs = generer_matchs_equilibres(equipes)
+        matchs.to_csv(BRACKET_FILE, index=False)
 
-            # Sauvegarde de la date dans un fichier JSON
-            with open(INFO_FILE, "w") as f:
-                json.dump({"date_tournoi": str(date_tournoi)}, f)
+        info = {
+            "date": date_tournoi.strftime("%Y-%m-%d"),
+            "capitaines": capitaines,
+            "equipes": list(equipes.keys())
+        }
+        with open(INFO_FILE, "w") as f:
+            json.dump(info, f)
 
-        st.success("✅ Tournoi complet créé avec pauses Zamboni et date enregistrée !")
+        st.success("✅ Tournoi complet créé et capitaines enregistrés !")
         st.balloons()
 
-        st.markdown("### 🕓 Horaire du tournoi")
         st.dataframe(matchs[["Heure", "Équipe A", "Équipe B", "Durée (min)", "Phase", "Type"]])
-
-        # --- PDF ---
-        st.subheader("📄 Télécharger le PDF")
-        if st.button("💾 Générer le PDF"):
-            buffer = io.BytesIO()
-            pdf = canvas.Canvas(buffer, pagesize=letter)
-            pdf.setFont("Helvetica-Bold", 14)
-            pdf.drawString(200, 770, f"Tournoi du {date_tournoi.strftime('%d/%m/%Y')}")
-            pdf.setFont("Helvetica", 12)
-            y = 740
-            pdf.drawString(50, y, "🕓 Horaire du tournoi :")
-            y -= 20
-            for _, r in matchs.iterrows():
-                if r["Type"] == "Pause":
-                    pdf.drawString(60, y, f"{r['Heure']} — {r['Équipe A']} ({r['Durée (min)']} min)")
-                else:
-                    pdf.drawString(60, y, f"{r['Heure']} ({r['Durée (min)']} min): {r['Équipe A']} vs {r['Équipe B']}")
-                y -= 15
-            pdf.save()
-            buffer.seek(0)
-            st.download_button(
-                "⬇️ Télécharger le PDF",
-                buffer,
-                file_name=f"Tournoi_{date_tournoi.strftime('%Y%m%d')}.pdf",
-                mime="application/pdf"
-            )
-
-# --- Réinitialisation sécurisée ---
-st.divider()
-st.subheader("🧹 Réinitialiser le tournoi")
-if os.path.exists(BRACKET_FILE):
-    if st.button("🗑️ Supprimer le tournoi existant"):
-        confirm = st.radio("Souhaitez-vous vraiment supprimer le tournoi ?", ["Non", "Oui, supprimer"], horizontal=True)
-        if confirm == "Oui, supprimer":
-            os.remove(BRACKET_FILE)
-            if os.path.exists(INFO_FILE):
-                os.remove(INFO_FILE)
-            for k in ["tournoi_equipes", "players_present"]:
-                st.session_state.pop(k, None)
-            st.success("✅ Tournoi supprimé avec succès.")
