@@ -55,9 +55,10 @@ for col in ["Score A", "Score B", "Gagnant", "Prolongation"]:
 
 # --- Saisie des résultats ---
 st.divider()
-st.subheader("📝 Entrer les résultats des matchs")
+st.subheader("🕓 Horaire et résultats des matchs")
 
 for i, row in matchs.iterrows():
+    st.markdown(f"### 🕓 {row['Heure']} — {row['Phase']} {i+1 if row['Type']=='Match' else ''}")
     if row["Type"] == "Match":
         col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
         with col1:
@@ -71,7 +72,7 @@ for i, row in matchs.iterrows():
                 st.caption(f"👑 {capitaines[row['Équipe B']]}")
             score_b = st.number_input("", min_value=0, value=int(row["Score B"]), key=f"b{i}")
         with col3:
-            if row["Phase"] == "Ronde":  # seulement pour la ronde
+            if row["Phase"] == "Ronde":  # prolongation uniquement en ronde
                 prolong = st.checkbox("Prolongation", value=bool(row["Prolongation"]), key=f"p{i}")
                 matchs.loc[i, "Prolongation"] = prolong
             else:
@@ -80,11 +81,20 @@ for i, row in matchs.iterrows():
             gagnant = row["Équipe A"] if score_a > score_b else row["Équipe B"] if score_b > score_a else ""
             matchs.loc[i, ["Score A", "Score B", "Gagnant"]] = [score_a, score_b, gagnant]
 
-        # --- Bouton de mise à jour positionné juste avant les matchs spécifiques ---
-        if "1er vs 4e" in str(row["Équipe A"]) and st.button("⚙️ Mettre à jour les demi-finales maintenant"):
-            st.session_state["update_demi"] = True
-        if "Gagnants demi-finales" in str(row["Équipe A"]) and st.button("⚙️ Mettre à jour la finale maintenant"):
-            st.session_state["update_finale"] = True
+        # --- Boutons dynamiques ---
+        if "1er vs 4e" in str(row["Équipe A"]):
+            st.markdown("➡️ **Cliquez ici pour générer les demi-finales :**")
+            if st.button("⚙️ Mettre à jour les demi-finales maintenant", key=f"demi{i}"):
+                st.session_state["update_demi"] = True
+
+        if "Gagnants demi-finales" in str(row["Équipe A"]):
+            st.markdown("➡️ **Cliquez ici pour générer la finale :**")
+            if st.button("⚙️ Mettre à jour la finale maintenant", key=f"finale{i}"):
+                st.session_state["update_finale"] = True
+
+    else:
+        # Afficher pauses ou Zamboni
+        st.info(f"🧊 {row['Équipe A']} ({row['Durée (min)']} minutes)")
 
 st.divider()
 if st.button("💾 Enregistrer les résultats"):
@@ -102,7 +112,7 @@ def classement_from_results(df):
             continue
         a, b = row["Équipe A"], row["Équipe B"]
         sa, sb = row["Score A"], row["Score B"]
-        pa, pb = row.get("Prolongation", False), row.get("Prolongation", False)
+        prolong = bool(row.get("Prolongation", False))
         for team in [a, b]:
             if team not in scores:
                 scores[team] = {"Pts": 0, "BP": 0, "BC": 0}
@@ -112,10 +122,12 @@ def classement_from_results(df):
         scores[b]["BC"] += sa
         if sa > sb:
             scores[a]["Pts"] += 2
-            if pa: scores[b]["Pts"] += 1
+            if prolong:
+                scores[b]["Pts"] += 1
         elif sb > sa:
             scores[b]["Pts"] += 2
-            if pb: scores[a]["Pts"] += 1
+            if prolong:
+                scores[a]["Pts"] += 1
     clas = pd.DataFrame(scores).T
     clas["Diff"] = clas["BP"] - clas["BC"]
     clas = clas.sort_values(["Pts", "Diff", "BP"], ascending=False).reset_index()
@@ -125,17 +137,17 @@ def classement_from_results(df):
 classement = classement_from_results(matchs)
 st.dataframe(classement)
 
-# --- Mettre à jour demi-finales (si cliqué) ---
+# --- Mise à jour des demi-finales ---
 if "update_demi" in st.session_state and st.session_state["update_demi"]:
     if len(classement) >= 4:
         top4 = classement["Équipe"].tolist()[:4]
         matchs.loc[matchs["Équipe A"].str.contains("1er vs 4e"), ["Équipe A", "Équipe B"]] = [top4[0], top4[3]]
         matchs.loc[matchs["Équipe A"].str.contains("2e vs 3e"), ["Équipe A", "Équipe B"]] = [top4[1], top4[2]]
         matchs.to_csv(BRACKET_FILE, index=False)
-        st.success("✅ Demi-finales mises à jour !")
+        st.success("✅ Demi-finales mises à jour avec succès !")
         st.session_state["update_demi"] = False
 
-# --- Mettre à jour finale (si cliqué) ---
+# --- Mise à jour de la finale ---
 if "update_finale" in st.session_state and st.session_state["update_finale"]:
     demi = matchs[matchs["Phase"] == "Demi-finale"]
     gagnants = demi["Gagnant"].tolist()
@@ -145,7 +157,7 @@ if "update_finale" in st.session_state and st.session_state["update_finale"]:
         st.success("✅ Finale mise à jour avec les gagnants des demi-finales !")
         st.session_state["update_finale"] = False
 
-# --- Bracket ---
+# --- Bracket du tournoi ---
 st.divider()
 st.subheader("🎯 Bracket du tournoi")
 
