@@ -8,15 +8,18 @@ st.title("📜 Historique des matchs")
 path = "data/historique.csv"
 
 def saison_from_date(date_str):
-    """Retourne la saison (ex: 2024-2025) à partir d'une date"""
+    """Retourne la saison (ex: 2024-2025) selon le calendrier hockey (août à avril)."""
     try:
         date = datetime.strptime(date_str, "%Y-%m-%d")
         annee = date.year
-        # Saison démarre à l’automne (août)
-        if date.month >= 8:
+        mois = date.month
+        # Saison de hockey : août (8) à avril (4)
+        if mois >= 8:  # août à décembre → saison de l'année courante à +1
             return f"{annee}-{annee + 1}"
-        else:
+        elif mois <= 4:  # janvier à avril → saison de l'année précédente à courante
             return f"{annee - 1}-{annee}"
+        else:
+            return "Hors saison"
     except Exception:
         return "Inconnue"
 
@@ -28,7 +31,7 @@ else:
     if df.empty:
         st.info("L’historique est vide pour le moment.")
     else:
-        # Ajouter la colonne saison si absente
+        # Ajouter la colonne Saison si elle n’existe pas
         if "Saison" not in df.columns:
             df["Saison"] = df["Date"].apply(saison_from_date)
             df.to_csv(path, index=False)
@@ -63,7 +66,7 @@ else:
             st.divider()
             col1, col2 = st.columns(2)
 
-            # ----- BLANCS -----
+            # ----- ÉQUIPE BLANCS -----
             with col1:
                 st.markdown("### ⚪ BLANCS")
                 st.markdown("**Trios :**")
@@ -74,7 +77,7 @@ else:
                 for j in match["Équipe_BLANCS"].split(", "):
                     st.write(f"- {j}")
 
-            # ----- NOIRS -----
+            # ----- ÉQUIPE NOIRS -----
             with col2:
                 st.markdown("### ⚫ NOIRS")
                 st.markdown("**Trios :**")
@@ -99,6 +102,14 @@ else:
                 df_saison[["Date", "Moyenne_BLANCS", "Moyenne_NOIRS"]],
                 use_container_width=True,
                 hide_index=True
+            )
+
+            # --- Export saison complète ---
+            st.download_button(
+                label=f"📦 Exporter toute la saison {saison_select} (CSV)",
+                data=df_saison.to_csv(index=False).encode("utf-8"),
+                file_name=f"saison_{saison_select}.csv",
+                mime="text/csv"
             )
 
         # --- Bouton de suppression complète ---
