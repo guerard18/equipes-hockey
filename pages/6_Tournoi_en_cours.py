@@ -58,7 +58,15 @@ st.divider()
 st.subheader("🕓 Horaire et résultats des matchs")
 
 for i, row in matchs.iterrows():
-    st.markdown(f"### 🕓 {row['Heure']} — {row['Phase']} {i+1 if row['Type']=='Match' else ''}")
+    heure = "" if pd.isna(row["Heure"]) else row["Heure"]
+    phase_label = row["Phase"]
+
+    # Ajouter "Éliminatoire" à toutes les phases
+    phase_label = f"Éliminatoire — {phase_label}"
+
+    # Affichage du titre du match / pause
+    st.markdown(f"### 🕓 {heure} — {phase_label}")
+
     if row["Type"] == "Match":
         col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
         with col1:
@@ -72,7 +80,7 @@ for i, row in matchs.iterrows():
                 st.caption(f"👑 {capitaines[row['Équipe B']]}")
             score_b = st.number_input("", min_value=0, value=int(row["Score B"]), key=f"b{i}")
         with col3:
-            if row["Phase"] == "Ronde":  # prolongation uniquement en ronde
+            if row["Phase"] == "Ronde":  # prolongation seulement en ronde
                 prolong = st.checkbox("Prolongation", value=bool(row["Prolongation"]), key=f"p{i}")
                 matchs.loc[i, "Prolongation"] = prolong
             else:
@@ -81,7 +89,7 @@ for i, row in matchs.iterrows():
             gagnant = row["Équipe A"] if score_a > score_b else row["Équipe B"] if score_b > score_a else ""
             matchs.loc[i, ["Score A", "Score B", "Gagnant"]] = [score_a, score_b, gagnant]
 
-        # --- Boutons dynamiques ---
+        # Boutons dynamiques
         if "1er vs 4e" in str(row["Équipe A"]):
             st.markdown("➡️ **Cliquez ici pour générer les demi-finales :**")
             if st.button("⚙️ Mettre à jour les demi-finales maintenant", key=f"demi{i}"):
@@ -93,8 +101,11 @@ for i, row in matchs.iterrows():
                 st.session_state["update_finale"] = True
 
     else:
-        # Afficher pauses ou Zamboni
-        st.info(f"🧊 {row['Équipe A']} ({row['Durée (min)']} minutes)")
+        # Affichage des pauses (sans NaN)
+        if str(row["Équipe A"]).strip() != "":
+            st.info(f"🧊 {row['Équipe A']} ({row['Durée (min)']} minutes)")
+        else:
+            st.info(f"🧊 Pause ({row['Durée (min)']} minutes)")
 
 st.divider()
 if st.button("💾 Enregistrer les résultats"):
