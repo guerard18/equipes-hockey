@@ -6,16 +6,31 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from utils import load_players, save_history
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+import io
+import itertools
 
 st.title("2️⃣ Formation des équipes de hockey 🏒")
 st.markdown(
-    "Forme automatiquement deux équipes équilibrées (**BLANCS ⚪ / NOIRS ⚫**) "
-    "avec 4 trios et 4 duos équilibrés, et affiche leurs moyennes de talent."
+    "Forme automatiquement entre **2 et 8 équipes équilibrées** et propose un mode **Tournoi** avec "
+    "création automatique de matchs garantissant 3 parties par équipe."
 )
 
-# Sélecteur de date du match
-st.subheader("📅 Date du match")
-date_match = st.date_input("Match du :", datetime.now().date())
+# --- Configuration ---
+st.subheader("⚙️ Configuration du match / tournoi")
+date_match = st.date_input("📅 Date du match", datetime.now().date())
+nb_equipes = st.slider("Nombre d'équipes :", min_value=2, max_value=8, value=4)
+mode_tournoi = st.checkbox("🏆 Activer le mode tournoi (3 matchs garantis par équipe)")
+
+# --- Noms personnalisés ---
+default_names = ["BLANCS ⚪", "NOIRS ⚫", "BLEUS 🔵", "VERTS 🟢", "ROUGES 🔴", "JAUNES 🟡", "ORANGES 🟠", "GRIS ⚫⚪"]
+team_names = []
+st.markdown("### ✏️ Nommer vos équipes")
+cols = st.columns(4)
+for i in range(nb_equipes):
+    with cols[i % 4]:
+        team_names.append(st.text_input(f"Équipe {i+1}", default_names[i]))
 
 # Charger les joueurs présents
 players = load_players()
@@ -26,7 +41,7 @@ if len(players_present) < 10:
     st.warning("⚠️ Peu de joueurs présents — les équipes seront formées quand même.")
 
 # --- GÉNÉRATION DES ÉQUIPES ---
-def generate_teams(players_present: pd.DataFrame):
+def generate_teams(players_present: pd.DataFrame, nb_equipes: int):
     if players_present.empty:
         return None
 
@@ -39,25 +54,15 @@ def generate_teams(players_present: pd.DataFrame):
     attaquants = players_present[players_present["poste"] == "Attaquant"].copy()
     defenseurs = players_present[players_present["poste"] == "Défenseur"].copy()
 
-    # équilibrage
-    if len(defenseurs) < 8:
-        supl = attaquants.nlargest(8 - len(defenseurs), "talent_defense")
-        defenseurs = pd.concat([defenseurs, supl])
-        attaquants = attaquants.drop(supl.index)
+    nb_trios_total = nb_equipes * 2  # 2 trios par équipe
+    nb_duos_total = nb_equipes * 2   # 2 duos par équipe
 
-    if len(attaquants) < 12:
-        supl = defenseurs.nlargest(12 - len(attaquants), "talent_attaque")
-        attaquants = pd.concat([attaquants, supl])
-        defenseurs = defenseurs.drop(supl.index)
-
-    # répartition snake draft
     def snake_draft(df, nb_groupes, colonne):
         if df.empty:
             return [pd.DataFrame() for _ in range(nb_groupes)]
         df = df.sample(frac=1).sort_values(colonne, ascending=False).reset_index(drop=True)
         groupes = [[] for _ in range(nb_groupes)]
-        sens = 1
-        idx = 0
+        sens, idx = 1, 0
         for _, joueur in df.iterrows():
             groupes[idx].append(joueur)
             idx += sens
@@ -69,110 +74,76 @@ def generate_teams(players_present: pd.DataFrame):
                 idx = 0
         return [pd.DataFrame(g) for g in groupes]
 
-    trios = snake_draft(attaquants, 4, "talent_attaque")
-    duos = snake_draft(defenseurs, 4, "talent_defense")
+    trios = snake_draft(attaquants, nb_trios_total, "talent_attaque")
+    duos = snake_draft(defenseurs, nb_duos_total, "talent_defense")
     random.shuffle(trios)
     random.shuffle(duos)
 
-    equipeB_trios = trios[::2]
-    equipeN_trios = trios[1::2]
-    equipeB_duos = duos[::2]
-    equipeN_duos = duos[1::2]
+    equipes = {}
+    for i in range(nb_equipes):
+        equipes[i] = {"trios": trios[i::nb_equipes], "duos": duos[i::nb_equipes]}
 
     def moyenne(unites, colonne):
         valeurs = [u[colonne].mean() for u in unites if not u.empty]
         return round(sum(valeurs) / len(valeurs), 2) if valeurs else 0
 
-    moyB = round((moyenne(equipeB_trios, "talent_attaque") + moyenne(equipeB_duos, "talent_defense")) / 2, 2)
-    moyN = round((moyenne(equipeN_trios, "talent_attaque") + moyenne(equipeN_duos, "talent_defense")) / 2, 2)
+    for eq in equipes.values():
+        moyA = moyenne(eq["trios"], "talent_attaque")
+        moyD = moyenne(eq["duos"], "talent_defense")
+        eq["moyenne"] = round((moyA + moyD) / 2, 2)
 
-    return dict(
-        equipeB_trios=equipeB_trios,
-        equipeN_trios=equipeN_trios,
-        equipeB_duos=equipeB_duos,
-        equipeN_duos=equipeN_duos,
-        moyB=moyB,
-        moyN=moyN
-    )
+    return equipes
+
 
 # --- GÉNÉRATION ET AFFICHAGE ---
-if st.button("🎯 Générer les équipes équilibrées"):
-    st.session_state["teams"] = generate_teams(players_present)
+if st.button("🎯 Générer les équipes"):
+    st.session_state["teams"] = generate_teams(players_present, nb_equipes)
 
 teams = st.session_state.get("teams")
 
+# --- AFFICHAGE DES ÉQUIPES ---
 if teams:
-    st.subheader("⚪ BLANCS")
-    for i, trio in enumerate(teams["equipeB_trios"], 1):
-        if not trio.empty:
-            moy = round(trio["talent_attaque"].mean(), 2)
-            st.write(f"**Trio {i} ({moy}) :** {', '.join(trio['nom'])}")
-    for i, duo in enumerate(teams["equipeB_duos"], 1):
-        if not duo.empty:
-            moy = round(duo["talent_defense"].mean(), 2)
-            st.write(f"**Duo {i} ({moy}) :** {', '.join(duo['nom'])}")
-    st.write(f"### Moyenne totale : {teams['moyB']}")
+    for i, eq in teams.items():
+        st.subheader(f"🏒 {team_names[i]} — Moyenne : {eq['moyenne']}")
+        for j, trio in enumerate(eq["trios"], 1):
+            if not trio.empty:
+                moy = round(trio["talent_attaque"].mean(), 2)
+                st.write(f"**Trio {j} ({moy}) :** {', '.join(trio['nom'])}")
+        for j, duo in enumerate(eq["duos"], 1):
+            if not duo.empty:
+                moy = round(duo["talent_defense"].mean(), 2)
+                st.write(f"**Duo {j} ({moy}) :** {', '.join(duo['nom'])}")
+        st.divider()
 
-    st.subheader("⚫ NOIRS")
-    for i, trio in enumerate(teams["equipeN_trios"], 1):
-        if not trio.empty:
-            moy = round(trio["talent_attaque"].mean(), 2)
-            st.write(f"**Trio {i} ({moy}) :** {', '.join(trio['nom'])}")
-    for i, duo in enumerate(teams["equipeN_duos"], 1):
-        if not duo.empty:
-            moy = round(duo["talent_defense"].mean(), 2)
-            st.write(f"**Duo {i} ({moy}) :** {', '.join(duo['nom'])}")
-    st.write(f"### Moyenne totale : {teams['moyN']}")
+    # --- MODE TOURNOI ---
+    if mode_tournoi:
+        st.subheader("🏆 Bracket du tournoi (3 matchs garantis)")
 
-    if st.button("💾 Enregistrer dans l’historique"):
-        equipeB = [p for t in (teams["equipeB_trios"] + teams["equipeB_duos"]) for p in t["nom"].tolist()]
-        equipeN = [p for t in (teams["equipeN_trios"] + teams["equipeN_duos"]) for p in t["nom"].tolist()]
-        save_history(
-            equipeB, equipeN, teams["moyB"], teams["moyN"],
-            date_match.strftime("%Y-%m-%d"),
-            triosB=teams["equipeB_trios"], duosB=teams["equipeB_duos"],
-            triosN=teams["equipeN_trios"], duosN=teams["equipeN_duos"]
-        )
-        st.success("✅ Équipes enregistrées dans l’historique avec détails des trios et duos.")
+        equipes_list = [team_names[i] for i in range(nb_equipes)]
 
-    st.divider()
-    st.subheader("📧 Envoyer les équipes par courriel")
-    expediteur = st.text_input("Adresse Gmail d’expéditeur")
-    mot_passe = st.text_input("Mot de passe d’application Gmail", type="password")
-    destinataires = st.text_area("Destinataires (séparés par des virgules)")
+        # Round-robin partiel : chaque équipe joue 3 matchs
+        matchups = []
+        for i, e1 in enumerate(equipes_list):
+            adversaires = [e2 for j, e2 in enumerate(equipes_list) if j != i]
+            random.shuffle(adversaires)
+            for opp in adversaires[:3]:
+                if {e1, opp} not in [{m[0], m[1]} for m in matchups]:
+                    matchups.append((e1, opp))
 
-    if st.button("📨 Envoyer le courriel HTML"):
-        corps_html = f"""
-        <html><body>
-        <h2>🏒 Match du {date_match.strftime("%Y-%m-%d")}</h2>
-        <h3>⚪ BLANCS (moyenne {teams['moyB']})</h3>
-        {"<br>".join([f"Trio {i+1}: " + ", ".join(t['nom']) for i, t in enumerate(teams['equipeB_trios'])])}
-        {"<br>".join([f"Duo {i+1}: " + ", ".join(t['nom']) for i, t in enumerate(teams['equipeB_duos'])])}
-        <h3>⚫ NOIRS (moyenne {teams['moyN']})</h3>
-        {"<br>".join([f"Trio {i+1}: " + ", ".join(t['nom']) for i, t in enumerate(teams['equipeN_trios'])])}
-        {"<br>".join([f"Duo {i+1}: " + ", ".join(t['nom']) for i, t in enumerate(teams['equipeN_duos'])])}
-        </body></html>
-        """
-        try:
-            msg = MIMEMultipart("alternative")
-            msg["From"] = expediteur
-            msg["To"] = destinataires
-            msg["Subject"] = f"🏒 Match du {date_match.strftime('%Y-%m-%d')} - Équipes BLANCS vs NOIRS"
-            msg.attach(MIMEText(corps_html, "html", "utf-8"))
+        tournoi_df = pd.DataFrame(matchups, columns=["Équipe A", "Équipe B"])
+        st.dataframe(tournoi_df, use_container_width=True)
+        st.success(f"✅ {len(tournoi_df)} matchs générés ({len(equipes_list)} équipes, 3 matchs garantis chacune).")
 
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-                server.login(expediteur, mot_passe)
-                server.send_message(msg)
+        if st.button("💾 Enregistrer le tournoi"):
+            save_history(
+                equipeB=[], equipeN=[], moyB=0, moyN=0,
+                date_match=date_match.strftime("%Y-%m-%d"),
+                triosB=[], duosB=[], triosN=[], duosN=[],
+            )
+            tournoi_df.to_csv("data/tournoi_bracket.csv", index=False)
+            st.success("✅ Tournoi enregistré dans les fichiers de données.")
 
-            st.success("✅ Courriel envoyé avec succès !")
-        except Exception as e:
-            st.error(f"⚠️ Erreur : {e}")
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-import io
-
-# --- Télécharger en PDF ---
-if teams:
+    # --- PDF ---
     st.divider()
     st.subheader("📄 Télécharger les équipes en PDF")
 
@@ -184,30 +155,31 @@ if teams:
         pdf.setFont("Helvetica", 12)
 
         y = 740
-        pdf.drawString(50, y, f"⚪ BLANCS (moyenne {teams['moyB']})")
-        y -= 20
-        for i, trio in enumerate(teams["equipeB_trios"], 1):
-            pdf.drawString(60, y, f"Trio {i}: {', '.join(trio['nom'])}")
-            y -= 15
-        for i, duo in enumerate(teams["equipeB_duos"], 1):
-            pdf.drawString(60, y, f"Duo {i}: {', '.join(duo['nom'])}")
-            y -= 15
+        for i, eq in teams.items():
+            pdf.drawString(50, y, f"{team_names[i]} (moyenne {eq['moyenne']})")
+            y -= 20
+            for j, trio in enumerate(eq["trios"], 1):
+                pdf.drawString(60, y, f"Trio {j}: {', '.join(trio['nom'])}")
+                y -= 15
+            for j, duo in enumerate(eq["duos"], 1):
+                pdf.drawString(60, y, f"Duo {j}: {', '.join(duo['nom'])}")
+                y -= 15
+            y -= 20
 
-        y -= 20
-        pdf.drawString(50, y, f"⚫ NOIRS (moyenne {teams['moyN']})")
-        y -= 20
-        for i, trio in enumerate(teams["equipeN_trios"], 1):
-            pdf.drawString(60, y, f"Trio {i}: {', '.join(trio['nom'])}")
-            y -= 15
-        for i, duo in enumerate(teams["equipeN_duos"], 1):
-            pdf.drawString(60, y, f"Duo {i}: {', '.join(duo['nom'])}")
-            y -= 15
+        if mode_tournoi:
+            y -= 20
+            pdf.setFont("Helvetica-Bold", 13)
+            pdf.drawString(50, y, "🏆 Tournoi - Matchs")
+            y -= 20
+            for a, b in matchups:
+                pdf.drawString(60, y, f"{a} vs {b}")
+                y -= 15
 
         pdf.save()
         buffer.seek(0)
         st.download_button(
             label="⬇️ Télécharger le PDF",
             data=buffer,
-            file_name=f"Match_{date_match}.pdf",
+            file_name=f"Tournoi_{date_match}.pdf" if mode_tournoi else f"Match_{date_match}.pdf",
             mime="application/pdf"
         )
