@@ -127,7 +127,7 @@ if equipes:
         matchs["Score A"] = 0
         matchs["Score B"] = 0
         matchs["Terminé"] = False
-        matchs["Phase"] = "Ronde"]
+        matchs["Phase"] = "Ronde"
         return matchs
 
     if st.button("🏁 Créer le tournoi"):
