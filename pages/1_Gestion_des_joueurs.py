@@ -7,72 +7,65 @@ st.title("👥 Gestion des joueurs")
 # Charger les joueurs
 df = load_players()
 
-# --- Compteur des joueurs présents ---
+# S'assurer que les talents sont en format float avec 2 décimales
+df["talent_attaque"] = df["talent_attaque"].astype(float).round(2)
+df["talent_defense"] = df["talent_defense"].astype(float).round(2)
+
+# 🧮 Compteur de joueurs présents
 present_count = df["present"].sum()
 st.info(f"✅ {present_count} joueurs présents sélectionnés")
 
-st.subheader("📝 Liste complète des joueurs")
-st.markdown("Modifie directement dans le tableau ci-dessous. Toutes les modifications sont enregistrées dans le fichier.")
+# Empêcher les noms dupliqués
+if df["nom"].duplicated().any():
+    st.warning("⚠️ Des noms sont dupliqués ! Tu dois corriger avant d’enregistrer.")
 
-# --- Tableau éditable ---
+st.subheader("Liste complète des joueurs")
+
 edited_df = st.data_editor(
     df,
     num_rows="dynamic",
     use_container_width=True,
-    hide_index=True,
     column_config={
-        "nom": "Nom du joueur",
-        "talent_attaque": st.column_config.NumberColumn("Talent Attaque", min_value=1, max_value=10),
-        "talent_defense": st.column_config.NumberColumn("Talent Défense", min_value=1, max_value=10),
-        "present": "Présent ?"
-    }
+        "nom": st.column_config.TextColumn("Nom du joueur"),
+        "talent_attaque": st.column_config.NumberColumn(
+            "Talent Attaque",
+            min_value=0.00,
+            max_value=10.00,
+            step=0.01,
+            format="%.2f"
+        ),
+        "talent_defense": st.column_config.NumberColumn(
+            "Talent Défense",
+            min_value=0.00,
+            max_value=10.00,
+            step=0.01,
+            format="%.2f"
+        ),
+        "present": st.column_config.CheckboxColumn("Présent ?")
+    },
+    hide_index=True
 )
 
-# --- Bouton enregistrer ---
-if st.button("💾 Enregistrer les modifications", use_container_width=True):
+# Nettoyage automatique des noms
+edited_df["nom"] = edited_df["nom"].fillna("").str.strip().str.upper()
+
+# Bouton d'enregistrement
+if st.button("💾 Enregistrer les modifications"):
+    # Vérifier doublons
+    if edited_df["nom"].duplicated().any():
+        st.error("⚠️ Impossible d’enregistrer : il y a des noms en double.")
+    else:
+        # Sauvegarde finale
+        edited_df["talent_attaque"] = edited_df["talent_attaque"].astype(float).round(2)
+        edited_df["talent_defense"] = edited_df["talent_defense"].astype(float).round(2)
+
+        save_players(edited_df)
+        st.success("✅ Modifications enregistrées avec succès.")
+        st.rerun()
+
+# Bouton remise à zéro
+if st.button("🧹 Remettre à zéro la présence"):
+    edited_df["present"] = False
     save_players(edited_df)
-    st.success("✅ Modifications enregistrées !")
-    st.rerun()
-
-st.divider()
-
-# --- Ajouter un joueur ---
-st.subheader("➕ Ajouter un joueur")
-with st.form("add_player_form", clear_on_submit=True):
-    new_name = st.text_input("Nom du joueur")
-    new_attack = st.number_input("Talent Attaque", min_value=1, max_value=10, value=5)
-    new_defense = st.number_input("Talent Défense", min_value=1, max_value=10, value=5)
-    submitted = st.form_submit_button("Ajouter le joueur")
-
-    if submitted:
-        if new_name.strip() == "":
-            st.warning("⚠️ Le nom ne peut pas être vide.")
-        elif new_name in df["nom"].values:
-            st.warning("⚠️ Ce joueur existe déjà.")
-        else:
-            df.loc[len(df)] = [new_name, new_attack, new_defense, False]
-            save_players(df)
-            st.success(f"✅ {new_name} ajouté à la liste !")
-            st.rerun()
-
-st.divider()
-
-# --- Supprimer un joueur ---
-st.subheader("❌ Supprimer un joueur")
-del_player = st.selectbox("Choisir un joueur à supprimer :", df["nom"])
-
-if st.button("🗑️ Supprimer ce joueur", use_container_width=True):
-    df = df[df["nom"] != del_player]
-    save_players(df)
-    st.success(f"🚫 {del_player} supprimé.")
-    st.rerun()
-
-st.divider()
-
-# --- Remettre à zéro les présences ---
-st.subheader("🧹 Gestion des présences")
-if st.button("🔄 Remettre toutes les présences à zéro", use_container_width=True):
-    df["present"] = False
-    save_players(df)
-    st.success("🧼 Tous les joueurs ont été marqués comme ABSENTS.")
+    st.success("✅ Toutes les présences ont été remises à zéro.")
     st.rerun()
